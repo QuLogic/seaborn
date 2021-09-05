@@ -5,8 +5,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Generator
     from pandas import DataFrame
     from matplotlib.axes import Axes
-    from .._core.mappings import SemanticMapping
-    from .._stats.base import Stat
+    from seaborn._core.mappings import SemanticMapping
+    from seaborn._stats.base import Stat
 
     MappingDict = Dict[str, SemanticMapping]
 
