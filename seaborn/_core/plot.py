@@ -147,10 +147,11 @@ class Plot:
             # stat with non-default params, it should use functools.partial
             stat = mark.default_stat()
 
+        orient_norm: Literal["x", "y"] | None
         orient_map = {"v": "x", "h": "y"}
-        orient = orient_map.get(orient, orient)  # type: ignore  # mypy false positive?
+        orient_norm = orient_map.get(orient, orient)  # type: ignore
 
-        self._layers.append(Layer(mark, stat, orient, data, variables))
+        self._layers.append(Layer(mark, stat, orient_norm, data, variables))
 
         return self
 
@@ -925,6 +926,7 @@ class Plot:
         tuple[list[dict], DataFrame], None, None
     ]:
         # TODO retype return with SubplotSpec or similar
+        # TODO also maybe abstract the whole thing somewhere, it's way too verbose
 
         pair_variables = self._pairspec.get("structure", {})
 

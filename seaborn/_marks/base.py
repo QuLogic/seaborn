@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from seaborn._core.rules import variable_type
-
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from typing import Literal, Any, Type, Dict
@@ -37,7 +35,7 @@ class Mark:
         # Paring that down here for the prototype to see what restrictions make sense.
 
         x_type = None if "x" not in scales else scales["x"].type
-        y_type = None if "x" not in scales else scales["y"].type
+        y_type = None if "y" not in scales else scales["y"].type
 
         if x_type is None:
             return "y"
