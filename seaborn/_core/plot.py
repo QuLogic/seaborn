@@ -822,7 +822,7 @@ class Plot:
                 grouping_vars = stat.grouping_vars + default_grouping_vars
                 df = self._apply_stat(df, grouping_vars, stat)
 
-            df = mark._adjust(df)
+            df = mark._adjust(df, mappings)
 
             # Our statistics happen on the scale we want, but then matplotlib is going
             # to re-handle the scaling, so we need to invert before handing off

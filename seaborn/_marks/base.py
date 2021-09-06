@@ -24,7 +24,7 @@ class Mark:
 
         self._kwargs = kwargs
 
-    def _adjust(self, df: DataFrame) -> DataFrame:
+    def _adjust(self, df: DataFrame, mappings: dict) -> DataFrame:
 
         return df
 
