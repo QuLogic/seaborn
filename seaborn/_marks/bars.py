@@ -9,7 +9,6 @@ class Bar(Mark):
     def __init__(self, multiple="dodge", **kwargs):
 
         super().__init__(**kwargs)
-
         self._multiple = multiple
 
     def _adjust(self, df, mappings):
@@ -73,6 +72,10 @@ class Bar(Mark):
                 lambda x: (x / sum_by_pos[x.name]) * max_by_pos[x.name]
             )
 
+            # TODO maybe this should be building a mapping dict for pos?
+            # (It is probably less relevent for bars, but what about e.g.
+            # a dense stripplot, where we'd be doing a lot more operations
+            # than we need to be doing this way.
             df.loc[:, pos] = (
                 df[pos]
                 - df[pos].map(max_by_pos) / 2
@@ -86,14 +89,10 @@ class Bar(Mark):
 
     def _plot_split(self, keys, data, ax, mappings, kws):
 
-        # TODO how do we automatically set orientation depending on the scale
-        # used (i.e., if x is numeric and y is categorical, we want horizontal bars).
-        # Is it necessary to make that something that can vary across Mark classes?
-
         if "hue" in data:
             kws["color"] = mappings["hue"](data["hue"])
         else:
-            kws["color"] = "C0"  # TODO need a general solution here
+            kws["color"] = "C0"  # FIXME:default attributes
 
         if self.orient == "y":
             func = ax.barh
