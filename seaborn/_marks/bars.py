@@ -6,7 +6,7 @@ class Bar(Mark):
 
     supports = ["hue"]
 
-    def __init__(self, multiple="dodge", **kwargs):
+    def __init__(self, multiple=None, **kwargs):
 
         super().__init__(**kwargs)
         self._multiple = multiple
@@ -27,10 +27,11 @@ class Bar(Mark):
         # c) Bar constructor kws?
         defaults = {"baseline": 0, "width": .8}
         df = df.assign(**{k: v for k, v in defaults.items() if k not in df})
+        # TODO should the above stuff happen somewhere else?
 
         # Bail here if we don't actually need to adjust anything?
-        # TODO should the above stuff happen somewhere else?
-        if not mappings:  # TODO filter this to grouping vars externally?
+        # TODO filter mappings externally?
+        if self._multiple is None or not mappings:
             return df
 
         # Now we need to know the levels of the grouping variables, hmmm.
@@ -96,9 +97,9 @@ class Bar(Mark):
 
         if self.orient == "y":
             func = ax.barh
-            argmap = dict(y="y", width="x", height="width")
+            varmap = dict(y="y", width="x", height="width")
         else:
             func = ax.bar
-            argmap = dict(x="x", height="y", width="width")
+            varmap = dict(x="x", height="y", width="width")
 
-        func(**{k: data[v] for k, v in argmap.items()}, **kws)
+        func(**{k: data[v] for k, v in varmap.items()}, **kws)

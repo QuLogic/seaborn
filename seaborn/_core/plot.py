@@ -148,8 +148,7 @@ class Plot:
             stat = mark.default_stat()
 
         orient_norm: Literal["x", "y"] | None
-        orient_map = {"v": "x", "h": "y"}
-        orient_norm = orient_map.get(orient, orient)  # type: ignore
+        orient_norm = {"v": "x", "h": "y"}.get(orient, orient)  # type: ignore
 
         self._layers.append(Layer(mark, stat, orient_norm, data, variables))
 
