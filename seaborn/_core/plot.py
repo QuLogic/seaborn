@@ -123,7 +123,7 @@ class Plot:
         self,
         mark: Mark,
         stat: Stat | None = None,
-        orient: Literal["x", "y", "v", "h"] = "x",  # TODO "auto" as defined by Mark?
+        orient: Literal["x", "y", "v", "h"] | None = None,
         data: DataSource = None,
         **variables: VariableSpec,
     ) -> Plot:
@@ -140,6 +140,7 @@ class Plot:
         if stat is None and mark.default_stat is not None:
             # TODO We need some way to say "do no stat transformation" that is different
             # from "use the default". That's basically an IdentityStat.
+            # TODO when fixed see FIXME:IdentityStat
 
             # Default stat needs to be initialized here so that its state is
             # not modified across multiple plots. If a Mark wants to define a default
@@ -148,11 +149,8 @@ class Plot:
 
         orient_map = {"v": "x", "h": "y"}
         orient = orient_map.get(orient, orient)  # type: ignore  # mypy false positive?
-        mark.orient = orient  # type: ignore  # mypy false positive?
-        if stat is not None:
-            stat.orient = orient  # type: ignore  # mypy false positive?
 
-        self._layers.append(Layer(mark, stat, data, variables))
+        self._layers.append(Layer(mark, stat, orient, data, variables))
 
         return self
 
@@ -814,7 +812,12 @@ class Plot:
         stat = layer.stat
 
         full_df = data.frame
-        for subplots, df in self._generate_pairings(full_df):
+        for subplots, df, scales in self._generate_pairings(full_df):
+
+            orient = layer.orient or mark._infer_orient(scales)
+            mark.orient = orient  # type: ignore  # mypy false positive?
+            if stat is not None:  # FIXME:IdentityStat
+                stat.orient = orient  # type: ignore  # mypy false positive?
 
             df = self._scale_coords(subplots, df)
 
@@ -1069,12 +1072,14 @@ class Layer:
         self,
         mark: Mark,
         stat: Stat | None,
+        orient: Literal["x", "y"] | None,
         source: DataSource | None,
         variables: dict[str, VariableSpec],
     ):
 
         self.mark = mark
         self.stat = stat
+        self.orient = orient
         self.source = source
         self.variables = variables
 

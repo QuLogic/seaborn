@@ -92,6 +92,8 @@ class Bar(Mark):
 
         if "hue" in data:
             kws["color"] = mappings["hue"](data["hue"])
+        else:
+            kws["color"] = "C0"  # TODO need a general solution here
 
         if self.orient == "y":
             func = ax.barh
