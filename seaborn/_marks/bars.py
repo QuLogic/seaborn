@@ -6,9 +6,38 @@ class Bar(Mark):
 
     supports = ["hue"]
 
-    def __init__(self, multiple=None, **kwargs):
+    def __init__(
+        self,
+        # parameters that will be mappable?
+        width=.8,
+        color=None,  # should this have different default?
+        alpha=None,
+        facecolor=None,
+        edgecolor=None,
+        edgewidth=None,
+        pattern=None,
+        # other parameters?
+        multiple=None,
+        **kwargs,  # specify mpl kwargs? Not be a catchall?
+    ):
 
         super().__init__(**kwargs)
+
+        # TODO can we abstract this somehow, e.g. with a decorator?
+        # I think it would be better to programatically generate.
+        # The decorator would need to know what mappables are
+        # added/removed from the parent class. And then what other
+        # kwargs there are. But maybe there should not be other kwargs?
+        self._mappable_attributes = dict(  # TODO better name!
+            width=width,
+            color=color,
+            alpha=alpha,
+            facecolor=facecolor,
+            edgecolor=edgecolor,
+            edgewidth=edgewidth,
+            pattern=pattern,
+        )
+
         self._multiple = multiple
 
     def _adjust(self, df, mappings):
