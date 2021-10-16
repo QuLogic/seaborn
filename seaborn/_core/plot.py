@@ -374,7 +374,7 @@ class Plot:
         norm: NormSpec = None,
         # TODO add clip? Useful for e.g., making sure lines don't get too thick.
         # (If we add clip, should we make the legend say like ``> value`)?
-        **kwargs
+        **kwargs  # Needed? Or expose what we need?
     ) -> Plot:
 
         # TODO XXX FIXME matplotlib scales sometimes default to
@@ -410,7 +410,9 @@ class Plot:
             # TODO what about when we want to infer the scale from the norm?
             # e.g. currently you pass LogNorm to get a log normalization...
             norm = norm_from_scale(scale, norm)
+
         self._scales[var] = ScaleWrapper(scale, "numeric", norm)
+
         return self
 
     def scale_categorical(
@@ -568,7 +570,8 @@ class Plot:
         for layer in self._layers:
             variables |= set(layer.data.frame)
 
-        for var in (var for var in variables if var not in self._scales):
+        for var in variables:
+
             all_values = pd.concat([
                 self._data.frame.get(var),
                 # TODO important to check for var in x.variables, not just in x
@@ -576,8 +579,13 @@ class Plot:
                 *(y.data.frame.get(var) for y in self._layers if var in y.variables)
             ], ignore_index=True)
 
-            # TODO eventually this will be updating a different dictionary
-            self._scales[var] = ScaleWrapper.from_inferred_type(all_values)
+            if var in self._scales:
+                scale = self._scales[var]
+            else:
+                scale = ScaleWrapper.from_inferred_type(all_values)
+
+            # TODO change to store on the result object
+            self._scales[var] = scale.setup(all_values)
 
         # TODO Think about how this is going to handle situations where we have
         # e.g. ymin and ymax but no y specified. I think in that situation one

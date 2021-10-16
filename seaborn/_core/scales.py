@@ -101,6 +101,10 @@ class ScaleWrapper:
             return self._scale.cast(data)
         return data
 
+    def setup(self, data):
+
+        return copy(self)
+
 
 class CategoricalScale(LinearScale):
 
