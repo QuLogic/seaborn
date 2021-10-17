@@ -10,7 +10,7 @@ from pandas.testing import assert_series_equal
 
 from seaborn._compat import MarkerStyle
 from seaborn._core.rules import categorical_order
-from seaborn._core.scales import ScaleWrapper, CategoricalScale
+from seaborn._core.scales import CategoricalScale
 from seaborn._core.mappings import (
     BooleanSemantic,
     ColorSemantic,

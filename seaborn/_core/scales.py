@@ -22,7 +22,7 @@ class Scale:
 
     def __init__(
         self,
-        scale_obj: ScaleBase,
+        scale_obj: ScaleBase | None,
         norm: Normalize | tuple[Any, Any] | None,
     ):
 
@@ -40,6 +40,7 @@ class Scale:
     def setup(self, data: Series) -> Scale:
 
         out = copy(self)
+        out.norm = copy(self.norm)
         out.axis = DummyAxis()
         out.axis.update_units(out.cast(data))
         out.normalize(data)  # Autoscale norm if unset
@@ -52,22 +53,25 @@ class Scale:
 
         if axis is None:
             axis = self.axis
-        array = axis.convert_units(self.cast(data))
-        return pd.Series(array, index=data.index, name=data.name)
+        array = axis.convert_units(self.cast(data).to_numpy())
+        return pd.Series(array, data.index, name=data.name)
 
     def normalize(self, data: Series) -> Series:
 
-        return self.norm(self.convert(data))
+        array = self.norm(self.convert(data).to_numpy())
+        return pd.Series(array, data.index, name=data.name)
 
     def forward(self, data: Series) -> Series:
 
         transform = self.scale_obj.get_transform().transform
-        return transform(self.convert(data))
+        array = transform(self.convert(data).to_numpy())
+        return pd.Series(array, data.index, name=data.name)
 
     def reverse(self, data: Series) -> Series:
 
         transform = self.scale_obj.get_transform().inverted().transform
-        return transform(data)
+        array = transform(self.convert(data).to_numpy())
+        return pd.Series(array, data.index, name=data.name)
 
 
 class NumericScale(Scale):
@@ -114,12 +118,10 @@ class CategoricalScale(Scale):
     def cast(self, data: Series) -> Series:
 
         order = pd.Index(categorical_order(data, self.order))
-
-        data = data.map(self.formatter)
-        order = order.map(self.formatter)
+        cats = pd.Categorical(data.map(self.formatter), order.map(self.formatter))
 
         assert len(order) == len(order.unique())  # TODO this was coerced, but why?
-        return pd.Series(pd.Categorical(data, order), index=data.index, name=data.name)
+        return pd.Series(cats, index=data.index, name=data.name)
 
 
 class DateTimeScale(Scale):
@@ -149,10 +151,15 @@ class DummyAxis:
     def update_units(self, x):  # TODO types
 
         self.converter = mpl.units.registry.get_converter(x)
-        self.units = self.converter.default_units(x, self)
+        if self.converter is None:
+            self.units = None
+        else:
+            self.units = self.converter.default_units(x, self)
 
     def convert_units(self, x):  # TODO types
-        self.converter.convert(x, self.units, self)
+        if self.converter is None:
+            return x
+        return self.converter.convert(x, self.units, self)
 
 
 def norm_from_scale(
