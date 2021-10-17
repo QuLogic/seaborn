@@ -439,10 +439,14 @@ class Plot:
         self._scales[var] = CategoricalScale(scale, order, formatter)
         return self
 
-    def scale_datetime(self, var, format: str | None) -> Plot:
+    def scale_datetime(
+        self,
+        var: str,
+        norm: Normalize | tuple[Any, Any] | None = None,
+    ) -> Plot:
 
         scale = mpl.scale.LinearScale(var)
-        self._scales[var] = DateTimeScale(scale, format)
+        self._scales[var] = DateTimeScale(scale, norm)
 
         # TODO what else should this do?
         # We should pass kwargs to the DateTime cast probably.
