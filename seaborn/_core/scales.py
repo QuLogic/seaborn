@@ -1,6 +1,5 @@
 from __future__ import annotations
 from copy import copy
-from distutils.version import LooseVersion
 
 import numpy as np
 import pandas as pd
@@ -12,148 +11,144 @@ from seaborn._core.rules import VarType, variable_type, categorical_order
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from typing import Any, Callable
+    from typing import Callable
+    from numpy.typing import DTypeLike
     from pandas import Series
+    from matplotlib.axis import Axis
     from matplotlib.scale import ScaleBase
-    from seaborn._core.typing import VariableType
 
 
-class NormWrapper:
-    pass
+class Scale:
+
+    def __init__(self, scale_obj: ScaleBase):
+
+        self.scale_obj = scale_obj
+
+        # Initialize attributes that might not be set by subclasses
+        self.norm = None
+        self.order = None
+        self.formatter = None
+        ...
+
+    def cast(self, data: Series) -> Series:
+        raise NotImplementedError()
+
+    def normalize(self, data: Series) -> Series:
+        raise NotImplementedError()
+
+    def forward(self, data: Series) -> Series:
+
+        transform = self.scale_obj.get_transform().transform
+        return transform(self.convert(data))
+
+    def reverse(self, data: Series) -> Series:
+
+        transform = self.scale_obj.get_transform().inverted().transform
+        return transform(data)
+
+    def convert(self, data: Series, axis: Axis | None = None) -> Series:
+        raise NotImplementedError()
 
 
-class ScaleWrapper:
+class NumericScale(Scale):
 
-    def __init__(
-        self,
-        scale: ScaleBase,
-        type: VarType | VariableType,  # TODO don't use builtin name?  TODO saner typing
-        norm: tuple[float | None, float | None] | Normalize | None = None,
-        prenorm: Callable | None = None,
-    ):
+    scale_type = VarType("numeric")
 
-        transform = scale.get_transform()
-        self.forward = transform.transform
-        self.reverse = transform.inverted().transform
+    def __init__(self, scale_obj: ScaleBase, norm: Normalize, dtype: DTypeLike):
 
-        self.type = VarType(type)
-        self.type_declared = True
-
-        if norm is None:
-            # TODO customize norm_from_scale to return "datetime scale" etc.?
-            # TODO also we could use a pre-norm function for have a map_pointsize
-            # that has the option of squaring the sizes before normalizing.
-            # From the scale perspective it would be a general pre-norm function,
-            # but then map_pointsize could have a special param.
-            # TODO what else is this useful for? Maybe outlier removal?
-            # Maybe log norming for color?
-            norm = norm_from_scale(scale, norm)
+        super().__init__(scale_obj)
         self.norm = norm
+        self.dtype = dtype
 
-        self._scale = scale
+    def cast(self, data: Series) -> Series:
 
-    # TODO add a repr with useful information about what is wrapped and metadata
+        return data.astype(self.dtype)
 
-    if LooseVersion(mpl.__version__) < "3.4":
-        # Until matplotlib 3.4, matplotlib transforms could not be deepcopied.
-        # Fixing PR: https://github.com/matplotlib/matplotlib/pull/19281
-        # That means that calling deepcopy() on a Plot object fails when the
-        # recursion gets down to the `ScaleWrapper` objects.
-        # As a workaround, stop the recursion at this level with older matplotlibs.
-        def __deepcopy__(self, memo=None):
-            return copy(self)
+    def normalize(self, data: Series) -> Series:
 
-    @classmethod
-    def from_inferred_type(cls, data: Series) -> ScaleWrapper:
+        return self.norm(data)
 
-        var_type = variable_type(data)
-        axis = data.name
-        if var_type == "numeric":
-            scale = cls(LinearScale(axis), "numeric", None)
-        elif var_type == "categorical":
-            scale = cls(CategoricalScale(axis), "categorical", None)
-        elif var_type == "datetime":
-            # TODO add DateTimeNorm that converts to numeric first
-            scale = cls(DatetimeScale(axis), "datetime", None)
-        scale.type_declared = False
-        return scale
+    def setup(self, data: Series) -> NumericScale:
 
-    @property
-    def order(self):
-        if hasattr(self._scale, "order"):
-            return self._scale.order
-        return None
+        out = copy(self)
+        out.norm.autoscale_None(self.cast(data))
+        return out
 
-    def cast(self, data):
+    def convert(self, data: Series, axis: Axis | None = None) -> Series:
 
-        # TODO should the numeric/categorical/datetime cast logic happen here?
-        # Currently scale_numeric_ with string-typed data won't work because the
-        # matplotlib scales don't have casting logic, but I think people would execpt
-        # that to work.
-
-        # Perhaps we should defer to the scale if it has the argument but have fallback
-        # type-dependent casts here?
-
-        # But ... what about when we need metadata for the cast?
-        # (i.e. formatter for categorical or dtype for numeric?)
-
-        if hasattr(self._scale, "cast"):
-            return self._scale.cast(data)
-        return data
-
-    def setup(self, data):
-
-        return copy(self)
+        if axis is None:
+            return self.cast(data)
+        else:
+            array = axis.convert_units(self.cast(data))
+            return pd.Series(array, index=data.index, name=data.name)
 
 
-class CategoricalScale(LinearScale):
+class CategoricalScale(Scale):
 
-    def __init__(
-        self,
-        axis: str,
-        order: list | None = None,
-        formatter: Any = None
-    ):
-        # TODO what type is formatter? Just callable[Any, str]?
-        # One kind of annoying thing is that we'd like to have acccess to
-        # methods on the Series object, I guess lambdas will suffice...
+    scale_type = VarType("categorical")
 
-        super().__init__(axis)
+    def __init__(self, scale_obj: ScaleBase, order: list | None, formatter: Callable):
+
+        super().__init__(scale_obj)
         self.order = order
         self.formatter = formatter
 
     def cast(self, data: Series) -> Series:
 
         order = pd.Index(categorical_order(data, self.order))
-        if self.formatter is None:
-            order = order.astype(str)
-            data = data.astype(str)
+
+        data = data.map(self.formatter)
+        order = order.map(self.formatter)
+
+        assert len(order) == len(order.unique())  # TODO this was coerced, but why?
+        return pd.Series(pd.Categorical(data, order), index=data.index, name=data.name)
+
+    def setup(self, data: Series) -> CategoricalScale:
+
+        out = copy(self)
+        if out.order is None:
+            out.order = categorical_order(data)
+        return out
+
+    def convert(self, data: Series, axis: Axis | None = None) -> Series:
+
+        if axis is None:
+            array = self.cast(data).cat.codes
         else:
-            order = order.map(self.formatter)
-            data = data.map(self.formatter)
-
-        data = pd.Series(pd.Categorical(
-            data, order.unique(), self.order is not None
-        ), index=data.index)
-
-        return data
+            array = axis.convert_units(self.cast(data))
+        return pd.Series(array, index=data.index, name=data.name)
 
 
-class DatetimeScale(LinearScale):
+class DateTimeScale(Scale):
 
-    def __init__(self, axis: str):  # TODO norm? formatter?
+    scale_type = VarType("datetime")
 
-        super().__init__(axis)
+    def __init__(self, scale_obj: ScaleBase, format: str | None):
 
-    def cast(self, data):
+        super().__init__(scale_obj)
+        self.norm = mpl.colors.Normalize()
+        self.format = format
 
-        if variable_type(data) == "numeric":
-            # Use day units for consistency with matplotlib datetime handling
-            # Note that pandas ends up converting everything to ns internally afterwards
-            return pd.to_datetime(data, unit="D")
+    def cast(self, data: pd.Series) -> Series:
+
+        return pd.to_datetime(data, format=self.format)
+
+    def normalize(self, data: Series) -> Series:
+
+        return self.norm(self.convert(data))
+
+    def setup(self, data: Series) -> DateTimeScale:
+
+        out = copy(self)
+        out.norm.autoscale_None(self.convert(self.cast(data)))
+
+    def convert(self, data: Series, axis: Axis | None) -> Series:
+
+        if axis is None:
+            array = mpl.dates.date2num(self.cast(data))
         else:
-            # TODO should we accept a format string for handling ambiguous strings?
-            return pd.to_datetime(data)
+            array = axis.convert_units(self.cast(data))
+        return pd.Series(array, data.index, data.name)
 
 
 def norm_from_scale(
@@ -202,3 +197,17 @@ def norm_from_scale(
     new_norm.transform = scale.get_transform().transform  # type: ignore  # mypy #2427
 
     return new_norm
+
+
+def get_default_scale(data: Series):
+
+    axis = data.name
+    scale_obj = LinearScale(axis)
+
+    var_type = variable_type(data)
+    if var_type == "numeric":
+        return NumericScale(scale_obj, norm=mpl.colors.Normalize(), dtype=float)
+    elif var_type == "categorical":
+        return CategoricalScale(scale_obj, order=None, formatter=format)
+    elif var_type == "datetime":
+        return DateTimeScale(scale_obj)

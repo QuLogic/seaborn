@@ -21,10 +21,12 @@ from seaborn._core.mappings import (
     LineWidthSemantic,
 )
 from seaborn._core.scales import (
-    ScaleWrapper,
+    Scale,
+    NumericScale,
     CategoricalScale,
-    DatetimeScale,
-    norm_from_scale
+    DateTimeScale,
+    norm_from_scale,
+    get_default_scale,
 )
 
 from typing import TYPE_CHECKING
@@ -32,6 +34,7 @@ if TYPE_CHECKING:
     from typing import Literal, Any
     from collections.abc import Callable, Generator, Iterable, Hashable
     from pandas import DataFrame, Series, Index
+    from numpy.typing import DTypeLike
     from matplotlib.axes import Axes
     from matplotlib.color import Normalize
     from matplotlib.figure import Figure, SubFigure
@@ -65,7 +68,7 @@ class Plot:
     _layers: list[Layer]
     _semantics: dict[str, Semantic]
     _mappings: dict[str, SemanticMapping]  # TODO keys as Literal, or use TypedDict?
-    _scales: dict[str, ScaleWrapper]
+    _scales: dict[str, Scale]
 
     # TODO use TypedDict here
     _subplotspec: dict[str, Any]
@@ -372,6 +375,7 @@ class Plot:
         var: str,
         scale: str | ScaleBase = "linear",
         norm: NormSpec = None,
+        dtype: DTypeLike = float,
         # TODO add clip? Useful for e.g., making sure lines don't get too thick.
         # (If we add clip, should we make the legend say like ``> value`)?
         **kwargs  # Needed? Or expose what we need?
@@ -409,9 +413,11 @@ class Plot:
         if norm is None:
             # TODO what about when we want to infer the scale from the norm?
             # e.g. currently you pass LogNorm to get a log normalization...
+            # Answer: probably special-case LogNorm at the function layer?
+            # TODO do we need this given that we own normalization logic?
             norm = norm_from_scale(scale, norm)
 
-        self._scales[var] = ScaleWrapper(scale, "numeric", norm)
+        self._scales[var] = NumericScale(scale, norm, dtype)
 
         return self
 
@@ -419,7 +425,7 @@ class Plot:
         self,
         var: str,
         order: Series | Index | Iterable | None = None,
-        formatter: Callable | None = None,
+        formatter: Callable = format,
     ) -> Plot:
 
         # TODO how to set limits/margins "nicely"? (i.e. 0.5 data units, past extremes)
@@ -429,14 +435,14 @@ class Plot:
         if order is not None:
             order = list(order)
 
-        scale = CategoricalScale(var, order, formatter)
-        self._scales[var] = ScaleWrapper(scale, "categorical")
+        scale = mpl.scale.LinearScale(var)
+        self._scales[var] = CategoricalScale(scale, order, formatter)
         return self
 
-    def scale_datetime(self, var) -> Plot:
+    def scale_datetime(self, var, format: str | None) -> Plot:
 
-        scale = DatetimeScale(var)
-        self._scales[var] = ScaleWrapper(scale, "datetime")
+        scale = mpl.scale.LinearScale(var)
+        self._scales[var] = DateTimeScale(scale, format)
 
         # TODO what else should this do?
         # We should pass kwargs to the DateTime cast probably.
@@ -444,10 +450,6 @@ class Plot:
 
         # It will be nice to have more control over the formatting of the ticks
         # which is pretty annoying in standard matplotlib.
-
-        # Should datetime data ever have anything other than a linear scale?
-        # The only thing I can really think of are geologic/astro plots that
-        # use a reverse log scale, (but those are usually in units of years).
 
         return self
 
@@ -581,8 +583,10 @@ class Plot:
 
             if var in self._scales:
                 scale = self._scales[var]
+                scale.type_declared = True
             else:
-                scale = ScaleWrapper.from_inferred_type(all_values)
+                scale = get_default_scale(all_values)
+                scale.type_declared = False
 
             # TODO change to store on the result object
             self._scales[var] = scale.setup(all_values)
@@ -648,7 +652,7 @@ class Plot:
             for axis in "xy":
                 axis_key = sub[axis]
                 if axis_key in self._scales:
-                    scale = self._scales[axis_key]._scale
+                    scale = self._scales[axis_key].scale_obj  # TODO or get_mpl_scale()?
                     if LooseVersion(mpl.__version__) < "3.4":
                         # The ability to pass a BaseScale instance to
                         # Axes.set_{axis}scale was added to matplotlib in version 3.4.0:
@@ -787,7 +791,7 @@ class Plot:
     def _scale_coords(
         self,
         subplots: list[dict],  # TODO retype with a SubplotSpec or similar
-        scales: dict[str, ScaleWrapper],  # TODO same idea, but ScaleSpec
+        scales: dict[str, Scale],  # TODO same idea, but ScaleSpec
         df: DataFrame,
     ) -> DataFrame:
 
@@ -812,7 +816,7 @@ class Plot:
         self,
         coord_df: DataFrame,
         out_df: DataFrame,
-        scales: dict[str, ScaleWrapper],
+        scales: dict[str, Scale],
         ax: Axes,
     ) -> None:
 
@@ -825,10 +829,6 @@ class Plot:
             scale = scales[var]
             axis_obj = getattr(ax, f"{var[0]}axis")
 
-            # TODO this is no longer valid with the way the semantic order overrides
-            # Perhaps better to have the scale always be the source of the order info
-            # but have a step where the order specified in the mapping overrides it?
-            # Alternately, use self._orderings here?
             if scale.order is not None:
                 values = values[values.isin(scale.order)]
 
@@ -844,7 +844,7 @@ class Plot:
 
     def _unscale_coords(
         self,
-        scales: dict[str, ScaleWrapper],
+        scales: dict[str, Scale],
         df: DataFrame
     ) -> DataFrame:
 
@@ -868,7 +868,7 @@ class Plot:
         self,
         df: DataFrame
     ) -> Generator[
-        tuple[list[dict], dict[str, ScaleWrapper], DataFrame], None, None
+        tuple[list[dict], dict[str, Scale], DataFrame], None, None
     ]:
         # TODO retype return with SubplotSpec or similar
 
@@ -993,6 +993,8 @@ class Plot:
 
         # TODO perhaps have self.show() flip a switch to disable this, so that
         # user does not end up with two versions of the figure in the output
+
+        # TODO detect HiDPI and generate a retina png by default?
 
         # Preferred behavior is to clone self so that showing a Plot in the REPL
         # does not interfere with adding further layers onto it in the next cell.
