@@ -20,6 +20,10 @@ if TYPE_CHECKING:
 
 class Scale:
 
+    axis: DummyAxis
+    scale_obj: ScaleBase
+    type_declared: bool
+
     def __init__(
         self,
         scale_obj: ScaleBase | None,
@@ -27,22 +31,23 @@ class Scale:
     ):
 
         self.scale_obj = scale_obj
-
-        if not isinstance(norm, Normalize):
-            norm = norm_from_scale(scale_obj, norm)
-        self.norm = norm
+        self.norm = norm_from_scale(scale_obj, norm)
 
         # Initialize attributes that might not be set by subclasses
-        self.order = None
-        self.formatter = None  # TODO initialize with format?
+        self.order: list[Any] | None = None
+        self.formatter: Callable[[Any], str] | None = None
         ...
+
+    def _units_seed(self, data: Series) -> Series:
+
+        return self.cast(data).dropna()
 
     def setup(self, data: Series) -> Scale:
 
         out = copy(self)
         out.norm = copy(self.norm)
         out.axis = DummyAxis()
-        out.axis.update_units(out.cast(data))
+        out.axis.update_units(self._units_seed(data).to_numpy())
         out.normalize(data)  # Autoscale norm if unset
         return out
 
@@ -58,8 +63,9 @@ class Scale:
 
     def normalize(self, data: Series) -> Series:
 
-        array = self.norm(self.convert(data).to_numpy())
-        return pd.Series(array, data.index, name=data.name)
+        array = self.convert(data).to_numpy()
+        normed_array = self.norm(np.ma.masked_invalid(array))
+        return pd.Series(normed_array, data.index, name=data.name)
 
     def forward(self, data: Series) -> Series:
 
@@ -101,27 +107,41 @@ class CategoricalScale(Scale):
         self,
         scale_obj: ScaleBase,
         order: list | None,
-        formatter: Callable
+        formatter: Callable[[Any], str]
     ):
 
         super().__init__(scale_obj, None)
         self.order = order
         self.formatter = formatter
 
-    def setup(self, data: Series) -> CategoricalScale:
+    def _units_seed(self, data: Series) -> Series:
 
-        out = super().setup(data)
-        if out.order is None:
-            out.order = categorical_order(data)
-        return out
+        return pd.Series(categorical_order(data, self.order)).map(self.formatter)
 
     def cast(self, data: Series) -> Series:
 
-        order = pd.Index(categorical_order(data, self.order))
-        cats = pd.Categorical(data.map(self.formatter), order.map(self.formatter))
+        # TODO explicit cast to string, or at least verify strings?
+        # TODO string dtype or object?
+        # strings = pd.Series(index=data.index, dtype="string")
+        strings = pd.Series(index=data.index, dtype=object)
+        strings.update(data.dropna().map(self.formatter))
+        if self.order is not None:
+            strings[~data.isin(self.order)] = None
+        return strings
 
-        assert len(order) == len(order.unique())  # TODO this was coerced, but why?
-        return pd.Series(cats, index=data.index, name=data.name)
+    def convert(self, data: Series, axis: Axis | None = None) -> Series:
+
+        if axis is None:
+            axis = self.axis
+
+        axis.update_units(self._units_seed(data).to_numpy())
+
+        # Matplotlib "string" unit handling can't handle missing data
+        strings = self.cast(data)
+        mask = strings.notna().to_numpy()
+        array = np.full_like(strings, np.nan, float)
+        array[mask] = axis.convert_units(strings[mask].to_numpy())
+        return pd.Series(array, data.index, name=data.name)
 
 
 class DateTimeScale(Scale):
@@ -135,28 +155,40 @@ class DateTimeScale(Scale):
     ):
 
         if isinstance(norm, tuple):
-            norm = tuple(self.convert(pd.Series(norm)))
+            norm_dates = np.array(norm, "datetime64[D]")
+            norm = tuple(mpl.dates.date2num(norm_dates))
 
         super().__init__(scale_obj, norm)
 
     def cast(self, data: pd.Series) -> Series:
 
-        if variable_type(data) != "datetime":
-            data = pd.to_datetime(data)  # TODO kwargs...
-        return data
+        if variable_type(data) == "datetime":
+            return data
+        elif variable_type(data) == "numeric":
+            return pd.to_datetime(data, unit="D")  # TODO kwargs...
+        else:
+            return pd.to_datetime(data)  # TODO kwargs...
 
 
 class DummyAxis:
 
+    def __init__(self):
+
+        self.converter = None
+        self.units = None
+
+    def set_units(self, units):
+
+        self.units = units
+
     def update_units(self, x):  # TODO types
 
         self.converter = mpl.units.registry.get_converter(x)
-        if self.converter is None:
-            self.units = None
-        else:
-            self.units = self.converter.default_units(x, self)
+        if self.converter is not None:
+            self.converter.default_units(x, self)
 
     def convert_units(self, x):  # TODO types
+
         if self.converter is None:
             return x
         return self.converter.convert(x, self.units, self)

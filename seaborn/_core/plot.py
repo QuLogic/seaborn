@@ -425,8 +425,21 @@ class Plot:
         self,
         var: str,
         order: Series | Index | Iterable | None = None,
-        formatter: Callable = format,
+        formatter: Callable[[Any], str] = format,
     ) -> Plot:
+
+        # TODO format() is not a great default for formatter(), ideally we'd want a
+        # function that produces a "minimal" representation for numeric data and dates.
+        # e.g.
+        # 0.3333333333 -> 0.33 (maybe .2g?) This is trickiest
+        # 1.0 -> 1
+        # 2000-01-01 01:01:000000 -> "2000-01-01", or even "Jan 2000" for monthly data
+
+        # Note that this will need to be chosen at setup() time as I think we
+        # want the minimal representation for *all* values, not each one
+        # individually.  There is also a subtle point about the difference
+        # between what shows up in the ticks when a coordinate variable is
+        # categorical vs what shows up in a legend.
 
         # TODO how to set limits/margins "nicely"? (i.e. 0.5 data units, past extremes)
         # TODO similarly, should this modify grid state like current categorical plots?
