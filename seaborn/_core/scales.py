@@ -12,7 +12,6 @@ from seaborn._core.rules import VarType, variable_type, categorical_order
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from typing import Any, Callable
-    from numpy.typing import DTypeLike
     from pandas import Series
     from matplotlib.axis import Axis
     from matplotlib.scale import ScaleBase
@@ -22,7 +21,6 @@ class Scale:
 
     axis: DummyAxis
     scale_obj: ScaleBase
-    type_declared: bool
 
     def __init__(
         self,
@@ -36,6 +34,7 @@ class Scale:
         # Initialize attributes that might not be set by subclasses
         self.order: list[Any] | None = None
         self.formatter: Callable[[Any], str] | None = None
+        self.type_declared: bool | None = None
         ...
 
     def _units_seed(self, data: Series) -> Series:
@@ -88,11 +87,10 @@ class NumericScale(Scale):
         self,
         scale_obj: ScaleBase,
         norm: Normalize | tuple[float | None, float | None] | None,
-        dtype: DTypeLike
     ):
 
         super().__init__(scale_obj, norm)
-        self.dtype = dtype
+        self.dtype = float  # Any reason to make this a parameter?
 
     def cast(self, data: Series) -> Series:
 
@@ -249,7 +247,7 @@ def get_default_scale(data: Series):
 
     var_type = variable_type(data)
     if var_type == "numeric":
-        return NumericScale(scale_obj, norm=mpl.colors.Normalize(), dtype=float)
+        return NumericScale(scale_obj, norm=mpl.colors.Normalize())
     elif var_type == "categorical":
         return CategoricalScale(scale_obj, order=None, formatter=format)
     elif var_type == "datetime":

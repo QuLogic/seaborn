@@ -34,7 +34,6 @@ if TYPE_CHECKING:
     from typing import Literal, Any
     from collections.abc import Callable, Generator, Iterable, Hashable
     from pandas import DataFrame, Series, Index
-    from numpy.typing import DTypeLike
     from matplotlib.axes import Axes
     from matplotlib.color import Normalize
     from matplotlib.figure import Figure, SubFigure
@@ -375,7 +374,7 @@ class Plot:
         var: str,
         scale: str | ScaleBase = "linear",
         norm: NormSpec = None,
-        dtype: DTypeLike = float,
+        # TODO Add dtype as a parameter? Seemed like a good idea ... but why?
         # TODO add clip? Useful for e.g., making sure lines don't get too thick.
         # (If we add clip, should we make the legend say like ``> value`)?
         **kwargs  # Needed? Or expose what we need?
@@ -417,7 +416,7 @@ class Plot:
             # TODO do we need this given that we own normalization logic?
             norm = norm_from_scale(scale, norm)
 
-        self._scales[var] = NumericScale(scale, norm, dtype)
+        self._scales[var] = NumericScale(scale, norm)
 
         return self
 

@@ -27,44 +27,38 @@ class TestNumeric:
     def test_cast_to_float(self, scale):
 
         x = pd.Series(["1", "2", "3"], name="x")
-        s = NumericScale(scale, None, float)
+        s = NumericScale(scale, None)
         assert_series_equal(s.cast(x), x.astype(float))
-
-    def test_cast_to_int(self, scale):
-
-        x = pd.Series([1., 2., 3.], name="x")
-        s = NumericScale(scale, None, int)
-        assert_series_equal(s.cast(x), x.astype(int))
 
     def test_convert(self, scale):
 
         x = pd.Series([1., 2., 3.], name="x")
-        s = NumericScale(scale, None, float).setup(x)
+        s = NumericScale(scale, None).setup(x)
         assert_series_equal(s.convert(x), x)
 
     def test_normalize_default(self, scale):
 
         x = pd.Series([1, 2, 3, 4])
-        s = NumericScale(scale, None, float).setup(x)
+        s = NumericScale(scale, None).setup(x)
         assert_series_equal(s.normalize(x), (x - 1) / 3)
 
     def test_normalize_tuple(self, scale):
 
         x = pd.Series([1, 2, 3, 4])
-        s = NumericScale(scale, (2, 4), float).setup(x)
+        s = NumericScale(scale, (2, 4)).setup(x)
         assert_series_equal(s.normalize(x), (x - 2) / 2)
 
     def test_normalize_missing(self, scale):
 
         x = pd.Series([1, 2, np.nan, 5])
-        s = NumericScale(scale, None, float).setup(x)
+        s = NumericScale(scale, None).setup(x)
         assert_series_equal(s.normalize(x), pd.Series([0., .25, np.nan, 1.]))
 
     def test_normalize_object_uninit(self, scale):
 
         x = pd.Series([1, 2, 3, 4])
         norm = Normalize()
-        s = NumericScale(scale, norm, float).setup(x)
+        s = NumericScale(scale, norm).setup(x)
         assert_series_equal(s.normalize(x), (x - 1) / 3)
         assert not norm.scaled()
 
@@ -72,7 +66,7 @@ class TestNumeric:
 
         x = pd.Series([1, 2, 3, 4])
         norm = Normalize(2)
-        s = NumericScale(scale, norm, float).setup(x)
+        s = NumericScale(scale, norm).setup(x)
         assert_series_equal(s.normalize(x), (x - 2) / 2)
         assert not norm.scaled()
 
@@ -80,7 +74,7 @@ class TestNumeric:
 
         x = pd.Series([1, 2, 3, 4])
         norm = Normalize(2, 5)
-        s = NumericScale(scale, norm, float).setup(x)
+        s = NumericScale(scale, norm).setup(x)
         assert_series_equal(s.normalize(x), (x - 2) / 3)
         assert norm.vmax == 5
 
@@ -88,7 +82,7 @@ class TestNumeric:
 
         x = pd.Series([1, 2, 3, 4])
         norm = Normalize()
-        s = NumericScale(scale, norm, float).setup(x)
+        s = NumericScale(scale, norm).setup(x)
         assert_series_equal(s.normalize(x[:3]), (x[:3] - 1) / 3)
         assert not norm.scaled()
 
@@ -96,21 +90,21 @@ class TestNumeric:
 
         x = pd.Series([1, 10, 100])
         scale = mpl.scale.LogScale("x")
-        s = NumericScale(scale, None, float).setup(x)
+        s = NumericScale(scale, None).setup(x)
         assert_series_equal(s.normalize(x), pd.Series([0, .5, 1]))
 
     def test_forward(self):
 
         x = pd.Series([1., 10., 100.])
         scale = mpl.scale.LogScale("x")
-        s = NumericScale(scale, None, float).setup(x)
+        s = NumericScale(scale, None).setup(x)
         assert_series_equal(s.forward(x), pd.Series([0., 1., 2.]))
 
     def test_reverse(self):
 
         x = pd.Series([1., 10., 100.])
         scale = mpl.scale.LogScale("x")
-        s = NumericScale(scale, None, float).setup(x)
+        s = NumericScale(scale, None).setup(x)
         y = pd.Series(np.log10(x))
         assert_series_equal(s.reverse(y), x)
 
