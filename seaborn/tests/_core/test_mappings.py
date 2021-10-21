@@ -162,7 +162,7 @@ class TestColor:
     def test_categorical_with_ordered_scale(self, cat_vector):
 
         cat_order = list(cat_vector.unique()[::-1])
-        scale = CategoricalScale(LinearScale("color"), order=cat_order)
+        scale = CategoricalScale(LinearScale("color"), cat_order, format)
 
         palette = "deep"
         colors = color_palette(palette, len(cat_order))
@@ -176,7 +176,8 @@ class TestColor:
 
     def test_categorical_implied_by_scale(self, num_vector, num_order):
 
-        scale = CategoricalScale(LinearScale("color"))
+        scale = CategoricalScale(LinearScale("color"), num_order, format)
+        scale.type_declared = True
 
         palette = "deep"
         colors = color_palette(palette, len(num_order))
@@ -195,7 +196,7 @@ class TestColor:
             order[[0, 1]] = order[[1, 0]]
         order = list(order)
 
-        scale = CategoricalScale(LinearScale("color"), order=order)
+        scale = CategoricalScale(LinearScale("color"), order, format)
 
         palette = "deep"
         colors = color_palette(palette, len(order))
@@ -392,13 +393,6 @@ class TestColor:
 
         with pytest.raises(ValueError):
             ColorSemantic(palette="not_a_palette").setup(num_vector, num_scale)
-
-    def test_bad_norm(self, num_vector):
-
-        norm = "not_a_norm"
-        scale = NumericScale(LinearScale("color"), norm=norm)
-        with pytest.raises(ValueError):
-            ColorSemantic().setup(num_vector, scale)
 
 
 class DiscreteBase:

@@ -28,6 +28,10 @@ class Scale:
         norm: Normalize | tuple[Any, Any] | None,
     ):
 
+        if norm is not None and not isinstance(norm, (Normalize, tuple)):
+            err = f"`norm` must be a Normalize object or tuple, not {type(norm)}"
+            raise TypeError(err)
+
         self.scale_obj = scale_obj
         self.norm = norm_from_scale(scale_obj, norm)
 

@@ -108,6 +108,13 @@ class TestNumeric:
         y = pd.Series(np.log10(x))
         assert_series_equal(s.reverse(y), x)
 
+    def test_bad_norm(self, scale):
+
+        norm = "not_a_norm"
+        err = "`norm` must be a Normalize object or tuple, not <class 'str'>"
+        with pytest.raises(TypeError, match=err):
+            scale = NumericScale(scale, norm=norm)
+
 
 class TestCategorical:
 
