@@ -226,39 +226,39 @@ class TestAxisScaling:
         for col, scale_type in zip("zat", ["numeric", "categorical", "datetime"]):
             p = Plot(long_df, x=col, y=col).add(MockMark()).plot()
             for var in "xy":
-                assert p._scales[var].type == scale_type
+                assert p._scales[var].scale_type == scale_type
 
     def test_inference_concatenates(self):
 
         p = Plot(x=[1, 2, 3]).add(MockMark(), x=["a", "b", "c"]).plot()
-        assert p._scales["x"].type == "categorical"
+        assert p._scales["x"].scale_type == "categorical"
 
     def test_categorical_explicit_order(self):
 
         p = Plot(x=["b", "c", "a"]).scale_categorical("x", order=["c", "a", "b"])
         scl = p._scales["x"]
-        assert scl.type == "categorical"
+        assert scl.scale_type == "categorical"
         assert scl.cast(pd.Series(["c", "a", "b"])).cat.codes.to_list() == [0, 1, 2]
 
     def test_numeric_as_categorical(self):
 
         p = Plot(x=[2, 1, 3]).scale_categorical("x")
         scl = p._scales["x"]
-        assert scl.type == "categorical"
+        assert scl.scale_type == "categorical"
         assert scl.cast(pd.Series([1, 2, 3])).cat.codes.to_list() == [0, 1, 2]
 
     def test_numeric_as_categorical_explicit_order(self):
 
         p = Plot(x=[1, 2, 3]).scale_categorical("x", order=[2, 1, 3])
         scl = p._scales["x"]
-        assert scl.type == "categorical"
+        assert scl.scale_type == "categorical"
         assert scl.cast(pd.Series([2, 1, 3])).cat.codes.to_list() == [0, 1, 2]
 
     def test_numeric_as_datetime(self):
 
         p = Plot(x=[1, 2, 3]).scale_datetime("x")
         scl = p._scales["x"]
-        assert scl.type == "datetime"
+        assert scl.scale_type == "datetime"
 
         numbers = [2, 1, 3]
         dates = ["1970-01-03", "1970-01-02", "1970-01-04"]
@@ -276,7 +276,7 @@ class TestAxisScaling:
         strings = ["2", "1", "3"]
         p = Plot(x=strings).scale_numeric("x")
         scl = p._scales["x"]
-        assert scl.type == "numeric"
+        assert scl.scale_type == "numeric"
         assert_series_equal(
             scl.cast(pd.Series(strings)),
             pd.Series(strings).astype(float)
@@ -287,7 +287,7 @@ class TestAxisScaling:
         dates = ["1970-01-03", "1970-01-02", "1970-01-04"]
         p = Plot(x=dates).scale_datetime("x")
         scl = p._scales["x"]
-        assert scl.type == "datetime"
+        assert scl.scale_type == "datetime"
         assert_series_equal(
             scl.cast(pd.Series(dates, dtype=object)),
             pd.Series(dates, dtype="datetime64[ns]")
@@ -339,7 +339,11 @@ class TestAxisScaling:
         m = MockMark()
         Plot(long_df, x=col).add(m).plot()
 
-        assert_vector_equal(m.passed_data[0]["x"], long_df[col].map(mpl.dates.date2num))
+        expected = long_df[col].map(mpl.dates.date2num)
+        if LooseVersion(mpl.__version__) < "3.3":
+            expected = expected + mpl.dates.date2num(np.datetime64('0000-12-31'))
+
+        assert_vector_equal(m.passed_data[0]["x"], expected)
 
 
 class TestPlotting:
