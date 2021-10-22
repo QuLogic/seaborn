@@ -10,6 +10,7 @@ import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt  # TODO defer import into Plot.show()
 
+from seaborn._compat import scale_factory
 from seaborn._core.rules import categorical_order
 from seaborn._core.data import PlotData
 from seaborn._core.subplots import Subplots
@@ -400,14 +401,7 @@ class Plot:
         # TODO we want to be able to call this on numbers-as-strings data and
         # have it work the way you would expect.
 
-        if isinstance(scale, str):
-            # Matplotlib scales require an Axis object for backwards compatability,
-            # but it is not used, aside from extraction of the axis_name in LogScale.
-            # This can be removed when the minimum matplotlib is raised to 3.4,
-            # and a simple string (`var`) can be passed.
-            class Axis:
-                axis_name = var
-            scale = mpl.scale.scale_factory(scale, Axis(), **kwargs)
+        scale = scale_factory(scale, var, **kwargs)
 
         if norm is None:
             # TODO what about when we want to infer the scale from the norm?

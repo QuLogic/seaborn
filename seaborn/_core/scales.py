@@ -79,7 +79,7 @@ class Scale:
     def reverse(self, data: Series) -> Series:
 
         transform = self.scale_obj.get_transform().inverted().transform
-        array = transform(self.convert(data).to_numpy())
+        array = transform(data.to_numpy())
         return pd.Series(array, data.index, name=data.name)
 
 

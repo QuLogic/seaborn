@@ -10,6 +10,7 @@ from matplotlib.scale import LinearScale
 import pytest
 from pandas.testing import assert_series_equal
 
+from seaborn._compat import scale_factory
 from seaborn._core.scales import (
     NumericScale,
     CategoricalScale,
@@ -89,21 +90,21 @@ class TestNumeric:
     def test_norm_from_scale(self):
 
         x = pd.Series([1, 10, 100])
-        scale = mpl.scale.LogScale("x")
+        scale = scale_factory("log", "x")
         s = NumericScale(scale, None).setup(x)
         assert_series_equal(s.normalize(x), pd.Series([0, .5, 1]))
 
     def test_forward(self):
 
         x = pd.Series([1., 10., 100.])
-        scale = mpl.scale.LogScale("x")
+        scale = scale_factory("log", "x")
         s = NumericScale(scale, None).setup(x)
         assert_series_equal(s.forward(x), pd.Series([0., 1., 2.]))
 
     def test_reverse(self):
 
         x = pd.Series([1., 10., 100.])
-        scale = mpl.scale.LogScale("x")
+        scale = scale_factory("log", "x")
         s = NumericScale(scale, None).setup(x)
         y = pd.Series(np.log10(x))
         assert_series_equal(s.reverse(y), x)
@@ -218,9 +219,9 @@ class TestDateTime:
 
     def test_cast_numbers(self, scale):
 
-        x = pd.Series([0., 1., 2.])
+        x = pd.Series([1., 2., 3.])
         s = DateTimeScale(scale).setup(x)
-        expected = pd.Series(mpl.dates.num2date(x)).dt.tz_localize(None)
+        expected = x.apply(pd.to_datetime, unit="D")
         assert_series_equal(s.cast(x), expected)
 
     def test_cast_dates(self, scale):
@@ -256,7 +257,7 @@ class TestDateTime:
 
         x = pd.Series(["2020-01-01", "2020-01-02", "2020-01-03"])
         norm = mpl.colors.Normalize()
-        norm(mpl.dates.date2num(x) + 1)
+        norm(mpl.dates.datestr2num(x) + 1)
         s = DateTimeScale(scale, norm).setup(x)
         assert_series_equal(s.normalize(x), pd.Series([-.5, 0., .5]))
 
@@ -264,7 +265,10 @@ class TestDateTime:
 
         x = pd.Series(["1970-01-04", "1970-01-05", "1970-01-06"])
         s = DateTimeScale(scale).setup(x)
-        assert_series_equal(s.forward(x), pd.Series([3., 4., 5.]))
+        # Broken prior to matplotlib epoch reset in 3.3
+        # expected = pd.Series([3., 4., 5.])
+        expected = pd.Series(mpl.dates.datestr2num(x))
+        assert_series_equal(s.forward(x), expected)
 
     def test_reverse(self, scale):
 
@@ -277,15 +281,20 @@ class TestDateTime:
 
         x = pd.Series(["1970-01-04", "1970-01-05", "1970-01-06"])
         s = DateTimeScale(scale).setup(x)
-        assert_series_equal(s.convert(x), pd.Series([3., 4., 5.]))
+        # Broken prior to matplotlib epoch reset in 3.3
+        # expected = pd.Series([3., 4., 5.])
+        expected = pd.Series(mpl.dates.datestr2num(x))
+        assert_series_equal(s.convert(x), expected)
 
     def test_convert_with_axis(self, scale):
 
         x = pd.Series(["1970-01-04", "1970-01-05", "1970-01-06"])
         s = DateTimeScale(scale).setup(x)
-
+        # Broken prior to matplotlib epoch reset in 3.3
+        # expected = pd.Series([3., 4., 5.])
+        expected = pd.Series(mpl.dates.datestr2num(x))
         ax = mpl.figure.Figure().subplots()
-        assert_series_equal(s.convert(x, ax.xaxis), pd.Series([3., 4., 5.]))
+        assert_series_equal(s.convert(x, ax.xaxis), expected)
 
 
 class TestDefaultScale:
@@ -295,7 +304,7 @@ class TestDefaultScale:
         assert isinstance(get_default_scale(s), NumericScale)
 
     def test_datetime(self):
-        s = pd.Series([1, 2, 3], dtype="datetime64[D]")
+        s = pd.Series(["2000", "2010", "2020"]).map(pd.to_datetime)
         assert isinstance(get_default_scale(s), DateTimeScale)
 
     def test_categorical(self):

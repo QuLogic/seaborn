@@ -15,3 +15,18 @@ def MarkerStyle(marker=None, fillstyle=None):
         else:
             marker = marker.get_marker()
     return mpl.markers.MarkerStyle(marker, fillstyle)
+
+
+def scale_factory(scale, axis, **kwargs):
+    """
+    Backwards compatability for creation of independent scales.
+
+    Matplotlib scales require an Axis object for instantiation on < 3.4.
+    But the axis is not used, aside from extraction of the axis_name in LogScale.
+
+    """
+    if isinstance(scale, str):
+        class Axis:
+            axis_name = axis
+        axis = Axis()
+    return mpl.scale.scale_factory(scale, axis, **kwargs)
