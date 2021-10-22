@@ -844,12 +844,14 @@ class Plot:
 
             # TODO FIXME:feedback wrap this in a try/except and reraise with
             # more information about what variable caused the problem
-            values = scale.cast(values)
-            axis_obj.update_units(categorical_order(values))  # TODO think carefully
+            # TODO no longer needed with new scales
+            # values = scale.cast(values)
+            # axis_obj.update_units(categorical_order(values))  # TODO think carefully
 
             # TODO it seems wrong that we need to cast to float here,
             # but convert_units sometimes outputs an object array (e.g. w/Int64 values)
-            scaled = scale.forward(axis_obj.convert_units(values).astype(float))
+            # scaled = scale.forward(axis_obj.convert_units(values).astype(float))
+            scaled = scale.forward(values, axis_obj)
             out_df.loc[values.index, var] = scaled
 
     def _unscale_coords(

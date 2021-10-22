@@ -70,10 +70,10 @@ class Scale:
         normed_array = self.norm(np.ma.masked_invalid(array))
         return pd.Series(normed_array, data.index, name=data.name)
 
-    def forward(self, data: Series) -> Series:
+    def forward(self, data: Series, axis: Axis | None = None) -> Series:
 
         transform = self.scale_obj.get_transform().transform
-        array = transform(self.convert(data).to_numpy())
+        array = transform(self.convert(data, axis).to_numpy())
         return pd.Series(array, data.index, name=data.name)
 
     def reverse(self, data: Series) -> Series:
