@@ -507,9 +507,9 @@ class Plot:
     def plot(self, pyplot=False) -> Plot:
 
         self._setup_data()
+        self._setup_figure(pyplot)
         self._setup_scales()
         self._setup_mappings()
-        self._setup_figure(pyplot)
 
         for layer in self._layers:
             layer_mappings = {k: v for k, v in self._mappings.items() if k in layer}
