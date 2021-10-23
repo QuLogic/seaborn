@@ -836,23 +836,12 @@ class Plot:
             # TODO Explain the logic of this method thoroughly
             # It is clever, but a bit confusing!
 
-            scale = scales[var]
-            axis_obj = getattr(ax, f"{var[0]}axis")
-
-            if scale.order is not None:
-                values = values[values.isin(scale.order)]
-
             # TODO FIXME:feedback wrap this in a try/except and reraise with
             # more information about what variable caused the problem
-            # TODO no longer needed with new scales
-            # values = scale.cast(values)
-            # axis_obj.update_units(categorical_order(values))  # TODO think carefully
 
-            # TODO it seems wrong that we need to cast to float here,
-            # but convert_units sometimes outputs an object array (e.g. w/Int64 values)
-            # scaled = scale.forward(axis_obj.convert_units(values).astype(float))
-            scaled = scale.forward(values, axis_obj)
-            out_df.loc[values.index, var] = scaled
+            scale = scales[var]
+            axis_obj = getattr(ax, f"{var[0]}axis")
+            out_df.loc[values.index, var] = scale.forward(values, axis_obj)
 
     def _unscale_coords(
         self,
@@ -907,7 +896,9 @@ class Plot:
             for axis, prefix in zip("xy", [x, y]):
                 key = axis if prefix is None else prefix
                 if key in self._scales:
-                    scales[axis] = self._scales[key]
+                    # TODO need to reorder this to catch the reassigned data
+                    # TODO also need to account for share{x/y}=False
+                    scales[axis] = self._scales[key].setup(df[key])
 
             reassignments = {}
             for axis, prefix in zip("xy", [x, y]):

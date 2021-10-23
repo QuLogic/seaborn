@@ -45,11 +45,13 @@ class Scale:
 
         return self.cast(data).dropna()
 
-    def setup(self, data: Series) -> Scale:
+    def setup(self, data: Series, axis: Axis | None = None) -> Scale:
 
         out = copy(self)
         out.norm = copy(self.norm)
-        out.axis = DummyAxis()
+        if axis is None:
+            axis = DummyAxis()
+        out.axis = axis
         out.axis.update_units(self._units_seed(data).to_numpy())
         out.normalize(data)  # Autoscale norm if unset
         return out

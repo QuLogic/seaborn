@@ -228,70 +228,43 @@ class TestAxisScaling:
             for var in "xy":
                 assert p._scales[var].scale_type == scale_type
 
+    def test_inference_from_layer_data(self):
+
+        p = Plot().add(MockMark(), x=["a", "b", "c"]).plot()
+        assert p._scales["x"].scale_type == "categorical"
+
     def test_inference_concatenates(self):
 
         p = Plot(x=[1, 2, 3]).add(MockMark(), x=["a", "b", "c"]).plot()
         assert p._scales["x"].scale_type == "categorical"
 
-    def test_categorical_explicit_order(self):
+    def test_inferred_categorical_converter(self):
 
-        p = Plot(x=["b", "c", "a"]).scale_categorical("x", order=["c", "a", "b"])
-        scl = p._scales["x"]
-        assert scl.scale_type == "categorical"
-        assert scl.cast(pd.Series(["c", "a", "b"])).cat.codes.to_list() == [0, 1, 2]
+        p = Plot(x=["b", "c", "a"]).add(MockMark()).plot()
+        ax = p._figure.axes[0]
+        assert ax.xaxis.convert_units("c") == 1
 
-    def test_numeric_as_categorical(self):
+    def test_explicit_categorical_converter(self):
 
-        p = Plot(x=[2, 1, 3]).scale_categorical("x")
-        scl = p._scales["x"]
-        assert scl.scale_type == "categorical"
-        assert scl.cast(pd.Series([1, 2, 3])).cat.codes.to_list() == [0, 1, 2]
+        p = Plot(y=[2, 1, 3]).scale_categorical("y").add(MockMark()).plot()
+        ax = p._figure.axes[0]
+        assert ax.yaxis.convert_units("3") == 2
 
-    def test_numeric_as_categorical_explicit_order(self):
-
-        p = Plot(x=[1, 2, 3]).scale_categorical("x", order=[2, 1, 3])
-        scl = p._scales["x"]
-        assert scl.scale_type == "categorical"
-        assert scl.cast(pd.Series([2, 1, 3])).cat.codes.to_list() == [0, 1, 2]
-
-    def test_numeric_as_datetime(self):
-
-        p = Plot(x=[1, 2, 3]).scale_datetime("x")
-        scl = p._scales["x"]
-        assert scl.scale_type == "datetime"
-
-        numbers = [2, 1, 3]
-        dates = ["1970-01-03", "1970-01-02", "1970-01-04"]
-        assert_series_equal(
-            scl.cast(pd.Series(numbers)),
-            pd.Series(dates, dtype="datetime64[ns]")
-        )
-
-    @pytest.mark.xfail
     def test_categorical_as_numeric(self):
 
         # TODO marked as expected fail because we have not implemented this yet
         # see notes in ScaleWrapper.cast
 
-        strings = ["2", "1", "3"]
-        p = Plot(x=strings).scale_numeric("x")
-        scl = p._scales["x"]
-        assert scl.scale_type == "numeric"
-        assert_series_equal(
-            scl.cast(pd.Series(strings)),
-            pd.Series(strings).astype(float)
-        )
+        p = Plot(x=["2", "1", "3"]).scale_numeric("x").add(MockMark()).plot()
+        ax = p._figure.axes[0]
+        assert ax.xaxis.converter is None
 
     def test_categorical_as_datetime(self):
 
         dates = ["1970-01-03", "1970-01-02", "1970-01-04"]
-        p = Plot(x=dates).scale_datetime("x")
-        scl = p._scales["x"]
-        assert scl.scale_type == "datetime"
-        assert_series_equal(
-            scl.cast(pd.Series(dates, dtype=object)),
-            pd.Series(dates, dtype="datetime64[ns]")
-        )
+        p = Plot(x=dates).scale_datetime("x").add(MockMark()).plot()
+        ax = p._figure.axes[0]
+        assert ax.xaxis.converter
 
     def test_mark_data_log_transform(self, long_df):
 
