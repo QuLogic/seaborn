@@ -578,6 +578,11 @@ class Plot:
         # TODO currently typoing variable name in `scale_*`, or scaling a variable that
         # isn't defined anywhere, silently does nothing. We should raise/warn on that.
 
+        # TODO we can setup the scales for the mappings in setup_mappings and I think
+        # we want to defer setting up the coordinate scales until we have subplots
+        # (and axis objects) but currently removing non-coordinate variables from here
+        # fails the tests because .order is not defined for categorical grouping vars
+
         variables = set(self._data.frame)
         for layer in self._layers:
             variables |= set(layer.data.frame)
@@ -609,13 +614,13 @@ class Plot:
 
     def _setup_mappings(self) -> None:
 
-        # TODO we should setup default mappings here based on whether a mapping
-        # variable appears in at least one of the layer data but isn't in self._mappings
-        # Source of what mappings to check can be some dictionary of default mappings?
-        defined = [v for v in SEMANTICS if any(v in y for y in self._layers)]
+        variables = set(self._data.frame)
+        for layer in self._layers:
+            variables |= set(layer.data.frame)
+        variables &= set(SEMANTICS)
 
         self._mappings = {}
-        for var in defined:
+        for var in variables:
 
             semantic = self._semantics.get(var) or SEMANTICS[var]
 
@@ -623,11 +628,17 @@ class Plot:
                 self._data.frame.get(var),
                 # TODO important to check for var in x.variables, not just in x
                 # Because we only want to concat if a variable was *added* here
-                # TODO note copy=pasted from setup_scales code!
                 *(x.data.frame.get(var) for x in self._layers if var in x.variables)
             ], ignore_index=True)
-            scale = self._scales.get(var)
-            self._mappings[var] = semantic.setup(all_values, scale)
+
+            if var in self._scales:
+                scale = self._scales[var]
+                scale.type_declared = True
+            else:
+                scale = get_default_scale(all_values)
+                scale.type_declared = False
+
+            self._mappings[var] = semantic.setup(all_values, scale.setup(all_values))
 
     def _setup_figure(self, pyplot: bool = False) -> None:
 
