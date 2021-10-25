@@ -318,6 +318,31 @@ class TestAxisScaling:
 
         assert_vector_equal(m.passed_data[0]["x"], expected)
 
+    def test_facet_categories(self):
+
+        m = MockMark()
+        p = Plot(x=["a", "b", "a", "c"], col=["x", "x", "y", "y"]).add(m).plot()
+        ax1, ax2 = p._figure.axes
+        assert len(ax1.get_xticks()) == 3
+        assert len(ax2.get_xticks()) == 3
+        assert_vector_equal(m.passed_data[0]["x"], [0, 1])
+        assert_vector_equal(m.passed_data[1]["x"], [0, 2])
+
+    def test_facet_categories_unshared(self):
+
+        m = MockMark()
+        p = (
+            Plot(x=["a", "b", "a", "c"], col=["x", "x", "y", "y"])
+            .configure(sharex=False)
+            .add(m)
+            .plot()
+        )
+        ax1, ax2 = p._figure.axes
+        assert len(ax1.get_xticks()) == 2
+        assert len(ax2.get_xticks()) == 2
+        assert_vector_equal(m.passed_data[0]["x"], [0, 1])
+        assert_vector_equal(m.passed_data[1]["x"], [0, 1])
+
 
 class TestPlotting:
 
@@ -1278,5 +1303,4 @@ class TestLabelVisibility:
 
 # TODO Current untested includes:
 # - anything having to do with semantic mapping
-# - interaction with existing matplotlib objects
 # - any important corner cases in the original test_core suite

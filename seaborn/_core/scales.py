@@ -51,8 +51,8 @@ class Scale:
         out.norm = copy(self.norm)
         if axis is None:
             axis = DummyAxis()
+        axis.update_units(self._units_seed(data).to_numpy())
         out.axis = axis
-        out.axis.update_units(self._units_seed(data).to_numpy())
         out.normalize(data)  # Autoscale norm if unset
         return out
 
@@ -63,7 +63,9 @@ class Scale:
 
         if axis is None:
             axis = self.axis
-        array = axis.convert_units(self.cast(data).to_numpy())
+        orig_array = self.cast(data).to_numpy()
+        axis.update_units(orig_array)
+        array = axis.convert_units(orig_array)
         return pd.Series(array, data.index, name=data.name)
 
     def normalize(self, data: Series) -> Series:
@@ -138,7 +140,7 @@ class CategoricalScale(Scale):
         if axis is None:
             axis = self.axis
 
-        axis.update_units(self._units_seed(data).to_numpy())
+        # axis.update_units(self._units_seed(data).to_numpy())  TODO
 
         # Matplotlib "string" unit handling can't handle missing data
         strings = self.cast(data)

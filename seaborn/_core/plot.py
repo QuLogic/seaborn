@@ -135,6 +135,9 @@ class Plot:
         # TODO do a check here that mark has been initialized,
         # otherwise errors will be inscrutable
 
+        # TODO currently it doesn't work to specify faceting for the first time in add()
+        # and I think this would be too difficult. But it should not silently fail.
+
         if stat is None and mark.default_stat is not None:
             # TODO We need some way to say "do no stat transformation" that is different
             # from "use the default". That's basically an IdentityStat.
@@ -589,13 +592,14 @@ class Plot:
 
         for var in variables:
 
-            all_values = pd.concat([
+            layer_data = pd.concat([
                 self._data.frame.get(var),
                 # TODO important to check for var in x.variables, not just in x
                 # Because we only want to concat if a variable was *added* here
                 *(y.data.frame.get(var) for y in self._layers if var in y.variables)
-            ], ignore_index=True)
+            ], axis=1)
 
+            all_values = layer_data.stack()
             if var in self._scales:
                 scale = self._scales[var]
                 scale.type_declared = True
@@ -603,8 +607,56 @@ class Plot:
                 scale = get_default_scale(all_values)
                 scale.type_declared = False
 
-            # TODO change to store on the result object
             self._scales[var] = scale.setup(all_values)
+
+            def set_scale_obj(ax, axis, scale):
+
+                if LooseVersion(mpl.__version__) < "3.4":
+                    # The ability to pass a BaseScale instance to
+                    # Axes.set_{axis}scale was added to matplotlib in version 3.4.0:
+                    # https://github.com/matplotlib/matplotlib/pull/19089
+                    # Workaround: use the scale name, which is restrictive only
+                    # if the user wants to define a custom scale.
+                    # Additionally, setting the scale after updating units breaks in
+                    # some cases on older versions of matplotlib (/ older pandas?)
+                    # so only do it if necessary.
+                    axis_obj = getattr(ax, f"{axis}axis")
+                    if axis_obj.get_scale() != scale.variable:
+                        ax.set(**{f"{axis}scale": scale.variable})
+                else:
+                    ax.set(**{f"{axis}scale": scale.scale_obj})
+
+            if var[0] in "xy":
+
+                axis = var[0]
+                facet_dim = {"x": "col", "y": "row"}[axis]
+                share_state = self._subplots.subplot_spec[f"share{axis}"]
+
+                for subplot in self._subplots:
+
+                    if subplot[axis] != var:  # FIXME is this wrong?
+                        continue
+
+                    axis_obj = getattr(subplot["ax"], f"{axis}axis")
+
+                    if share_state in [True, "all"]:
+
+                        set_scale_obj(subplot["ax"], axis, scale)
+                        common_scale = scale.setup(all_values, axis_obj)
+                        subplot[f"{axis}scale"] = common_scale
+
+                    elif share_state in [False, "none"]:
+
+                        set_scale_obj(subplot["ax"], axis, scale)
+                        subplot_data = self._filter_subplot_data(
+                            self._data.frame, subplot,
+                        )
+                        subplot_values = layer_data.loc[subplot_data.index].stack()
+                        subplot_scale = scale.setup(subplot_values, axis_obj)
+                        subplot[f"{axis}scale"] = subplot_scale
+
+                    elif share_state == facet_dim:
+                        continue  # XXX FIXME complete this
 
         # TODO Think about how this is going to handle situations where we have
         # e.g. ymin and ymax but no y specified. I think in that situation one
@@ -614,13 +666,13 @@ class Plot:
 
     def _setup_mappings(self) -> None:
 
-        variables = set(self._data.frame)
+        variables = set(self._data.frame)  # TODO abstract this?
         for layer in self._layers:
             variables |= set(layer.data.frame)
-        variables &= set(SEMANTICS)
+        semantic_vars = variables & set(SEMANTICS)
 
         self._mappings = {}
-        for var in variables:
+        for var in semantic_vars:
 
             semantic = self._semantics.get(var) or SEMANTICS[var]
 
@@ -629,7 +681,7 @@ class Plot:
                 # TODO important to check for var in x.variables, not just in x
                 # Because we only want to concat if a variable was *added* here
                 *(x.data.frame.get(var) for x in self._layers if var in x.variables)
-            ], ignore_index=True)
+            ], axis=1).stack()
 
             if var in self._scales:
                 scale = self._scales[var]
@@ -758,7 +810,7 @@ class Plot:
         full_df = data.frame
         for subplots, scales, df in self._generate_pairings(full_df):
 
-            df = self._scale_coords(subplots, scales, df)
+            df = self._scale_coords(subplots, df)
 
             if stat is not None:
                 grouping_vars = stat.grouping_vars + default_grouping_vars
@@ -812,7 +864,6 @@ class Plot:
     def _scale_coords(
         self,
         subplots: list[dict],  # TODO retype with a SubplotSpec or similar
-        scales: dict[str, Scale],  # TODO same idea, but ScaleSpec
         df: DataFrame,
     ) -> DataFrame:
 
@@ -828,8 +879,8 @@ class Plot:
         for subplot in subplots:
             axes_df = self._filter_subplot_data(df, subplot)[coord_cols]
             with pd.option_context("mode.use_inf_as_null", True):
-                axes_df = axes_df.dropna()
-            self._scale_coords_single(axes_df, out_df, scales, subplot["ax"])
+                axes_df = axes_df.dropna()  # TODO always wanted?
+            self._scale_coords_single(axes_df, out_df, subplot)
 
         return out_df
 
@@ -837,8 +888,7 @@ class Plot:
         self,
         coord_df: DataFrame,
         out_df: DataFrame,
-        scales: dict[str, Scale],
-        ax: Axes,
+        subplot: dict,
     ) -> None:
 
         # TODO modify out_df in place or return and handle externally?
@@ -850,8 +900,9 @@ class Plot:
             # TODO FIXME:feedback wrap this in a try/except and reraise with
             # more information about what variable caused the problem
 
-            scale = scales[var]
-            axis_obj = getattr(ax, f"{var[0]}axis")
+            axis = var[0]
+            scale = subplot[f"{axis}scale"]
+            axis_obj = getattr(subplot["ax"], f"{axis}axis")
             out_df.loc[values.index, var] = scale.forward(values, axis_obj)
 
     def _unscale_coords(
