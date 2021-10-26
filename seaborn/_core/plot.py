@@ -623,44 +623,46 @@ class Plot:
 
             self._scales[var] = scale.setup(all_values)
 
-            if var[0] in "xy":
+            if var[0] not in "xy":
 
-                axis = var[0]
-                facet_dim = {"x": "col", "y": "row"}[axis]
-                share_state = self._subplots.subplot_spec[f"share{axis}"]
+                continue
 
-                for subplot in self._subplots:
+            axis = var[0]
+            facet_dim = {"x": "col", "y": "row"}[axis]
+            share_state = self._subplots.subplot_spec[f"share{axis}"]
 
-                    if subplot[axis] != var:  # FIXME is this wrong?
-                        continue
+            for subplot in self._subplots:
 
-                    axis_obj = getattr(subplot["ax"], f"{axis}axis")
+                if subplot[axis] != var:  # FIXME is this wrong?
+                    continue
 
-                    if axis_obj in axis_cache:
-                        axis_scale = axis_cache[axis_obj]
-                        subplot[f"{axis}scale"] = axis_scale
-                        continue
+                axis_obj = getattr(subplot["ax"], f"{axis}axis")
 
-                    set_scale_obj(subplot["ax"], axis, scale)
+                if axis_obj in axis_cache:
+                    axis_scale = axis_cache[axis_obj]
+                    subplot[f"{axis}scale"] = axis_scale
+                    continue
 
-                    if share_state in [True, "all"]:
+                set_scale_obj(subplot["ax"], axis, scale)
 
-                        axis_scale = scale.setup(all_values, axis_obj)
-                        subplot[f"{axis}scale"] = axis_scale
+                if share_state in [True, "all"]:
 
+                    axis_scale = scale.setup(all_values, axis_obj)
+                    subplot[f"{axis}scale"] = axis_scale
+
+                else:
+                    if share_state in [False, "none"]:
+                        subplot_data = self._filter_subplot_data(df, subplot)
+                    elif share_state == facet_dim and facet_dim in df:
+                        subplot_data = df[df[facet_dim] == subplot[facet_dim]]
                     else:
-                        if share_state in [False, "none"]:
-                            subplot_data = self._filter_subplot_data(df, subplot)
-                        elif share_state == facet_dim and facet_dim in df:
-                            subplot_data = df[df[facet_dim] == subplot[facet_dim]]
-                        else:
-                            subplot_data = df
+                        subplot_data = df
 
-                        subplot_values = layer_data.loc[subplot_data.index].stack()
-                        axis_scale = scale.setup(subplot_values, axis_obj)
-                        subplot[f"{axis}scale"] = axis_scale
+                    subplot_values = layer_data.loc[subplot_data.index].stack()
+                    axis_scale = scale.setup(subplot_values, axis_obj)
+                    subplot[f"{axis}scale"] = axis_scale
 
-                    axis_cache[axis_obj] = axis_scale
+                axis_cache[axis_obj] = axis_scale
 
         # TODO Think about how this is going to handle situations where we have
         # e.g. ymin and ymax but no y specified. I think in that situation one
@@ -722,28 +724,6 @@ class Plot:
         # --- Figure initialization
         figure_kws = {"figsize": getattr(self, "_figsize", None)}  # TODO fix
         self._figure = subplots.init_figure(pyplot, figure_kws, self._target)
-
-        # --- Assignment of scales
-        for sub in subplots:
-            ax = sub["ax"]
-            for axis in "xy":
-                axis_key = sub[axis]
-                if axis_key in self._scales:
-                    scale = self._scales[axis_key].scale_obj  # TODO or get_mpl_scale()?
-                    if LooseVersion(mpl.__version__) < "3.4":
-                        # The ability to pass a BaseScale instance to
-                        # Axes.set_{axis}scale was added to matplotlib in version 3.4.0:
-                        # https://github.com/matplotlib/matplotlib/pull/19089
-                        # Workaround: use the scale name, which is restrictive only
-                        # if the user wants to define a custom scale.
-                        # Additionally, setting the scale after updating units breaks in
-                        # some cases on older versions of matplotlib (/ older pandas?)
-                        # so only do it if necessary.
-                        axis_obj = getattr(ax, f"{axis}axis")
-                        if axis_obj.get_scale() != scale.name:
-                            ax.set(**{f"{axis}scale": scale.name})
-                    else:
-                        ax.set(**{f"{axis}scale": scale})
 
         # --- Figure annotation
         for sub in subplots:
