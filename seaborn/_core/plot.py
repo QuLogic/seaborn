@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Generator, Iterable, Hashable
     from pandas import DataFrame, Series, Index
     from matplotlib.axes import Axes
+    from matplotlib.axis import Axis
     from matplotlib.color import Normalize
     from matplotlib.figure import Figure, SubFigure
     from matplotlib.scale import ScaleBase
@@ -581,19 +582,32 @@ class Plot:
         # TODO currently typoing variable name in `scale_*`, or scaling a variable that
         # isn't defined anywhere, silently does nothing. We should raise/warn on that.
 
-        # TODO we can setup the scales for the mappings in setup_mappings and I think
-        # we want to defer setting up the coordinate scales until we have subplots
-        # (and axis objects) but currently removing non-coordinate variables from here
-        # fails the tests because .order is not defined for categorical grouping vars
+        def set_scale_obj(ax, axis, scale):
+            """Handle backwards compatability with setting matplotlib scale."""
+            if LooseVersion(mpl.__version__) < "3.4":
+                # The ability to pass a BaseScale instance to Axes.set_{}scale was added
+                # to matplotlib in version 3.4.0: GH: matplotlib/matplotlib/pull/19089
+                # Workaround: use the scale name, which is restrictive only if the user
+                # wants to define a custom scale. Additionally, setting the scale after
+                # updating units breaks in some cases on older versions of matplotlib
+                # (/ older pandas?), so only do it if necessary.
+                axis_obj = getattr(ax, f"{axis}axis")
+                if axis_obj.get_scale() != scale.variable:
+                    ax.set(**{f"{axis}scale": scale.variable})
+            else:
+                ax.set(**{f"{axis}scale": scale.scale_obj})
 
-        variables = set(self._data.frame)
+        df = self._data.frame
+        variables = set(df)
         for layer in self._layers:
             variables |= set(layer.data.frame)
+
+        axis_cache: dict[Axis, Scale] = {}
 
         for var in variables:
 
             layer_data = pd.concat([
-                self._data.frame.get(var),
+                df.get(var),
                 # TODO important to check for var in x.variables, not just in x
                 # Because we only want to concat if a variable was *added* here
                 *(y.data.frame.get(var) for y in self._layers if var in y.variables)
@@ -609,23 +623,6 @@ class Plot:
 
             self._scales[var] = scale.setup(all_values)
 
-            def set_scale_obj(ax, axis, scale):
-
-                if LooseVersion(mpl.__version__) < "3.4":
-                    # The ability to pass a BaseScale instance to
-                    # Axes.set_{axis}scale was added to matplotlib in version 3.4.0:
-                    # https://github.com/matplotlib/matplotlib/pull/19089
-                    # Workaround: use the scale name, which is restrictive only
-                    # if the user wants to define a custom scale.
-                    # Additionally, setting the scale after updating units breaks in
-                    # some cases on older versions of matplotlib (/ older pandas?)
-                    # so only do it if necessary.
-                    axis_obj = getattr(ax, f"{axis}axis")
-                    if axis_obj.get_scale() != scale.variable:
-                        ax.set(**{f"{axis}scale": scale.variable})
-                else:
-                    ax.set(**{f"{axis}scale": scale.scale_obj})
-
             if var[0] in "xy":
 
                 axis = var[0]
@@ -639,24 +636,31 @@ class Plot:
 
                     axis_obj = getattr(subplot["ax"], f"{axis}axis")
 
+                    if axis_obj in axis_cache:
+                        axis_scale = axis_cache[axis_obj]
+                        subplot[f"{axis}scale"] = axis_scale
+                        continue
+
+                    set_scale_obj(subplot["ax"], axis, scale)
+
                     if share_state in [True, "all"]:
 
-                        set_scale_obj(subplot["ax"], axis, scale)
-                        common_scale = scale.setup(all_values, axis_obj)
-                        subplot[f"{axis}scale"] = common_scale
+                        axis_scale = scale.setup(all_values, axis_obj)
+                        subplot[f"{axis}scale"] = axis_scale
 
-                    elif share_state in [False, "none"]:
+                    else:
+                        if share_state in [False, "none"]:
+                            subplot_data = self._filter_subplot_data(df, subplot)
+                        elif share_state == facet_dim and facet_dim in df:
+                            subplot_data = df[df[facet_dim] == subplot[facet_dim]]
+                        else:
+                            subplot_data = df
 
-                        set_scale_obj(subplot["ax"], axis, scale)
-                        subplot_data = self._filter_subplot_data(
-                            self._data.frame, subplot,
-                        )
                         subplot_values = layer_data.loc[subplot_data.index].stack()
-                        subplot_scale = scale.setup(subplot_values, axis_obj)
-                        subplot[f"{axis}scale"] = subplot_scale
+                        axis_scale = scale.setup(subplot_values, axis_obj)
+                        subplot[f"{axis}scale"] = axis_scale
 
-                    elif share_state == facet_dim:
-                        continue  # XXX FIXME complete this
+                    axis_cache[axis_obj] = axis_scale
 
         # TODO Think about how this is going to handle situations where we have
         # e.g. ymin and ymax but no y specified. I think in that situation one

@@ -325,8 +325,8 @@ class TestAxisScaling:
         ax1, ax2 = p._figure.axes
         assert len(ax1.get_xticks()) == 3
         assert len(ax2.get_xticks()) == 3
-        assert_vector_equal(m.passed_data[0]["x"], [0, 1])
-        assert_vector_equal(m.passed_data[1]["x"], [0, 2])
+        assert_vector_equal(m.passed_data[0]["x"], pd.Series([0., 1.], [0, 1]))
+        assert_vector_equal(m.passed_data[1]["x"], pd.Series([0., 2.], [2, 3]))
 
     def test_facet_categories_unshared(self):
 
@@ -340,8 +340,8 @@ class TestAxisScaling:
         ax1, ax2 = p._figure.axes
         assert len(ax1.get_xticks()) == 2
         assert len(ax2.get_xticks()) == 2
-        assert_vector_equal(m.passed_data[0]["x"], [0, 1])
-        assert_vector_equal(m.passed_data[1]["x"], [0, 1])
+        assert_vector_equal(m.passed_data[0]["x"], pd.Series([0., 1.], [0, 1]))
+        assert_vector_equal(m.passed_data[1]["x"], pd.Series([0., 1.], [2, 3]))
 
 
 class TestPlotting:
