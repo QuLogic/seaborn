@@ -592,8 +592,8 @@ class Plot:
                 # updating units breaks in some cases on older versions of matplotlib
                 # (/ older pandas?), so only do it if necessary.
                 axis_obj = getattr(ax, f"{axis}axis")
-                if axis_obj.get_scale() != scale.variable:
-                    ax.set(**{f"{axis}scale": scale.variable})
+                if axis_obj.get_scale() != scale.scale_obj.name:
+                    ax.set(**{f"{axis}scale": scale.scale_obj.name})
             else:
                 ax.set(**{f"{axis}scale": scale.scale_obj})
 
