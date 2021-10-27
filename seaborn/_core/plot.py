@@ -613,6 +613,13 @@ class Plot:
                 *(y.data.frame.get(var) for y in self._layers if var in y.variables)
             ], axis=1)
 
+            m = re.match(r"^(?P<prefix>(?P<axis>[x|y])\d*).*", var)
+            if m is None:
+                axis = None
+            else:
+                var = m.group("prefix")
+                axis = m.group("axis")
+
             all_values = layer_data.stack()
             if var in self._scales:
                 scale = self._scales[var]
@@ -623,16 +630,8 @@ class Plot:
 
             self._scales[var] = scale.setup(all_values)
 
-            coord_pattern = r"^(?P<prefix>(?P<axis>[x|y])\d*).*"
-            m = re.match(coord_pattern, var)
-            if m is None:
+            if axis is None:
                 continue
-            prefix = m.group("prefix")
-            axis = m.group("axis")
-
-            # TODO what do we need to do so "xmin" picks up scale("x"), etc.
-
-            self._scales[prefix]
 
             facet_dim = {"x": "col", "y": "row"}[axis]
             share_state = self._subplots.subplot_spec[f"share{axis}"]
