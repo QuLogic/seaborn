@@ -624,7 +624,6 @@ class Plot:
             self._scales[var] = scale.setup(all_values)
 
             if var[0] not in "xy":
-
                 continue
 
             axis = var[0]
@@ -663,6 +662,10 @@ class Plot:
                     subplot[f"{axis}scale"] = axis_scale
 
                 axis_cache[axis_obj] = axis_scale
+
+        for subplot in self._subplots:
+            subplot.setdefault("xscale", NumericScale(mpl.scale.LinearScale("x"), None))
+            subplot.setdefault("yscale", NumericScale(mpl.scale.LinearScale("y"), None))
 
         # TODO Think about how this is going to handle situations where we have
         # e.g. ymin and ymax but no y specified. I think in that situation one
@@ -804,7 +807,7 @@ class Plot:
 
             # Our statistics happen on the scale we want, but then matplotlib is going
             # to re-handle the scaling, so we need to invert before handing off
-            df = self._unscale_coords(scales, df)
+            df = self._unscale_coords(subplots, df)
 
             grouping_vars = mark.grouping_vars + default_grouping_vars
             generate_splits = self._setup_split_generator(
@@ -852,7 +855,6 @@ class Plot:
     ) -> DataFrame:
 
         coord_cols = [c for c in df if re.match(r"^[xy]\D*$", c)]
-
         out_df = (
             df
             .copy(deep=False)
@@ -864,50 +866,33 @@ class Plot:
             axes_df = self._filter_subplot_data(df, subplot)[coord_cols]
             with pd.option_context("mode.use_inf_as_null", True):
                 axes_df = axes_df.dropna()  # TODO always wanted?
-            self._scale_coords_single(axes_df, out_df, subplot)
+            for var, values in axes_df.items():
+                axis = var[0]
+                scale = subplot[f"{axis}scale"]
+                axis_obj = getattr(subplot["ax"], f"{axis}axis")
+                out_df.loc[values.index, var] = scale.forward(values, axis_obj)
 
         return out_df
 
-    def _scale_coords_single(
-        self,
-        coord_df: DataFrame,
-        out_df: DataFrame,
-        subplot: dict,
-    ) -> None:
-
-        # TODO modify out_df in place or return and handle externally?
-        for var, values in coord_df.items():
-
-            # TODO Explain the logic of this method thoroughly
-            # It is clever, but a bit confusing!
-
-            # TODO FIXME:feedback wrap this in a try/except and reraise with
-            # more information about what variable caused the problem
-
-            axis = var[0]
-            scale = subplot[f"{axis}scale"]
-            axis_obj = getattr(subplot["ax"], f"{axis}axis")
-            out_df.loc[values.index, var] = scale.forward(values, axis_obj)
-
     def _unscale_coords(
         self,
-        scales: dict[str, Scale],
+        subplots: list[dict],  # TODO retype with a SubplotSpec or similar
         df: DataFrame
     ) -> DataFrame:
 
-        # Note this is now different from what's in scale_coords as the dataframe
-        # that comes into this method will have pair columns reassigned to x/y
-        coord_df = df.filter(regex="(^x)|(^y)")
+        coord_cols = [c for c in df if re.match(r"^[xy]\D*$", c)]
         out_df = (
             df
-            .drop(coord_df.columns, axis=1)
+            .drop(coord_cols, axis=1)
             .copy(deep=False)
             .reindex(df.columns, axis=1)  # So unscaled columns retain their place
         )
 
-        for var, col in coord_df.items():
-            axis = var[0]  # TODO check this logic
-            out_df[var] = scales[axis].reverse(coord_df[var])
+        for subplot in subplots:
+            axes_df = self._filter_subplot_data(df, subplot)[coord_cols]
+            for var, values in axes_df.items():
+                scale = subplot[f"{var[0]}scale"]
+                out_df.loc[values.index, var] = scale.reverse(axes_df[var])
 
         return out_df
 
