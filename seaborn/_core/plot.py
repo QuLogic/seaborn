@@ -623,10 +623,17 @@ class Plot:
 
             self._scales[var] = scale.setup(all_values)
 
-            if var[0] not in "xy":
+            coord_pattern = r"^(?P<prefix>(?P<axis>[x|y])\d*).*"
+            m = re.match(coord_pattern, var)
+            if m is None:
                 continue
+            prefix = m.group("prefix")
+            axis = m.group("axis")
 
-            axis = var[0]
+            # TODO what do we need to do so "xmin" picks up scale("x"), etc.
+
+            self._scales[prefix]
+
             facet_dim = {"x": "col", "y": "row"}[axis]
             share_state = self._subplots.subplot_spec[f"share{axis}"]
 
@@ -795,7 +802,7 @@ class Plot:
         stat = layer.stat
 
         full_df = data.frame
-        for subplots, scales, df in self._generate_pairings(full_df):
+        for subplots, df in self._generate_pairings(full_df):
 
             df = self._scale_coords(subplots, df)
 
@@ -900,7 +907,7 @@ class Plot:
         self,
         df: DataFrame
     ) -> Generator[
-        tuple[list[dict], dict[str, Scale], DataFrame], None, None
+        tuple[list[dict], DataFrame], None, None
     ]:
         # TODO retype return with SubplotSpec or similar
 
@@ -909,7 +916,7 @@ class Plot:
         if not pair_variables:
             # TODO casting to list because subplots below is a list
             # Maybe a cleaner way to do this?
-            yield list(self._subplots), self._scales, df
+            yield list(self._subplots), df
             return
 
         iter_axes = itertools.product(*[
@@ -923,14 +930,6 @@ class Plot:
                 if (x is None or sub["x"] == x) and (y is None or sub["y"] == y):
                     subplots.append(sub)
 
-            scales = {}
-            for axis, prefix in zip("xy", [x, y]):
-                key = axis if prefix is None else prefix
-                if key in self._scales:
-                    # TODO need to reorder this to catch the reassigned data
-                    # TODO also need to account for share{x/y}=False
-                    scales[axis] = self._scales[key].setup(df[key])
-
             reassignments = {}
             for axis, prefix in zip("xy", [x, y]):
                 if prefix is not None:
@@ -940,7 +939,7 @@ class Plot:
                         for col in df if col.startswith(prefix)
                     })
 
-            yield subplots, scales, df.assign(**reassignments)
+            yield subplots, df.assign(**reassignments)
 
     def _filter_subplot_data(
         self,
