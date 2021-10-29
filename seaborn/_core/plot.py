@@ -581,6 +581,8 @@ class Plot:
 
         # TODO currently typoing variable name in `scale_*`, or scaling a variable that
         # isn't defined anywhere, silently does nothing. We should raise/warn on that.
+        # Related: it might also make sense to allow scaling of x/y when neither are
+        # defined, since x/y axes *do* exist. Currently this neither works nor raises.
 
         # Determine all of the variables that will be used at some point in the plot
         df = self._data.frame
@@ -588,12 +590,22 @@ class Plot:
         for layer in self._layers:
             variables |= set(layer.data.frame)
 
+        # Catch cases where a variable is explicitly scaled but has no data,
+        # which is *likely* to be a user error (i.e. a typo or mis-specified plot).
+        # It's possible we'd want to allow the coordinate axes to be scaled without
+        # data, which would let the Plot interface be used to set up an empty figure.
+        # So we could revisit this if that seems useful.
+        undefined = set(self._scales) - set(variables)
+        if undefined:
+            err = f"No data found for variable(s) with explicit scale: {undefined}"
+            raise RuntimeError(err)  # FIXME:PlotSpecError
+
         axis_cache: dict[Axis, Scale] = {}
 
         for var in variables:
 
             # Get the data all the distinct appearances of this variable.
-            layer_data = pd.concat([
+            var_data = pd.concat([
                 df.get(var),
                 # Only use variables that are *added* at the layer-level
                 *(y.data.frame.get(var) for y in self._layers if var in y.variables)
@@ -609,18 +621,18 @@ class Plot:
                 axis = m.group("axis")
 
             # Get the scale object, tracking whether it was explicitly set
-            all_values = layer_data.stack()
+            var_values = var_data.stack()
             if var in self._scales:
                 scale = self._scales[var]
                 scale.type_declared = True
             else:
-                scale = get_default_scale(all_values)
+                scale = get_default_scale(var_values)
                 scale.type_declared = False
 
             # Initialize the data-dependent parameters of the scale
             # Note that this returns a copy and does not mutate the original
             # This dictionary is used by the semantic mappings
-            self._scales[var] = scale.setup(all_values)
+            self._scales[var] = scale.setup(var_values)
 
             # The mappings are always shared across subplots, but the coordinate
             # scaling can be independent (i.e. with share{x/y} = False).
@@ -654,7 +666,7 @@ class Plot:
                 # Even though this is down here, it only gets called once, because
                 # the axis object gets cached and used in the rest of the loop.
                 if share_state in [True, "all"]:
-                    axis_scale = scale.setup(all_values, axis_obj)
+                    axis_scale = scale.setup(var_values, axis_obj)
                     subplot[f"{axis}scale"] = axis_scale
 
                 # Otherwise, we need to setup separate scales for different subplots
@@ -669,7 +681,7 @@ class Plot:
                         subplot_data = df
 
                     # Same operation as above, but using the reduced dataset
-                    subplot_values = layer_data.loc[subplot_data.index].stack()
+                    subplot_values = var_data.loc[subplot_data.index].stack()
                     axis_scale = scale.setup(subplot_values, axis_obj)
                     subplot[f"{axis}scale"] = axis_scale
 

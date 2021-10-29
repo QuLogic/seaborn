@@ -266,6 +266,26 @@ class TestAxisScaling:
         ax = p._figure.axes[0]
         assert ax.xaxis.converter
 
+    def test_faceted_log_scale(self):
+
+        p = Plot(y=[1, 10]).facet(col=["a", "b"]).scale_numeric("y", "log").plot()
+        for ax in p._figure.axes:
+            assert ax.get_yscale() == "log"
+
+    def test_faceted_log_scale_without_data(self):
+
+        p = Plot(y=[1, 10]).facet(col=["a", "b"]).scale_numeric("y", "log").plot()
+        for ax in p._figure.axes:
+            assert ax.get_yscale() == "log"
+
+    def test_paired_single_log_scale(self):
+
+        x0, x1 = [1, 2, 3], [1, 10, 100]
+        p = Plot().pair(x=[x0, x1]).scale_numeric("x1", "log").plot()
+        ax0, ax1 = p._figure.axes
+        assert ax0.get_xscale() == "linear"
+        assert ax1.get_xscale() == "log"
+
     def test_mark_data_log_transform(self, long_df):
 
         col = "z"
@@ -342,6 +362,13 @@ class TestAxisScaling:
         assert len(ax2.get_xticks()) == 2
         assert_vector_equal(m.passed_data[0]["x"], pd.Series([0., 1.], [0, 1]))
         assert_vector_equal(m.passed_data[1]["x"], pd.Series([0., 1.], [2, 3]))
+
+    def test_undefined_variable_raises(self):
+
+        p = Plot(x=[1, 2, 3], color=["a", "b", "c"]).scale_numeric("y")
+        err = r"No data found for variable\(s\) with explicit scale: {'y'}"
+        with pytest.raises(RuntimeError, match=err):
+            p.plot()
 
 
 class TestPlotting:
