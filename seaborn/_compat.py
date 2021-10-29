@@ -1,3 +1,4 @@
+from distutils.version import LooseVersion
 import matplotlib as mpl
 
 
@@ -30,3 +31,19 @@ def scale_factory(scale, axis, **kwargs):
             axis_name = axis
         axis = Axis()
     return mpl.scale.scale_factory(scale, axis, **kwargs)
+
+
+def set_scale_obj(ax, axis, scale):
+    """Handle backwards compatability with setting matplotlib scale."""
+    if LooseVersion(mpl.__version__) < "3.4":
+        # The ability to pass a BaseScale instance to Axes.set_{}scale was added
+        # to matplotlib in version 3.4.0: GH: matplotlib/matplotlib/pull/19089
+        # Workaround: use the scale name, which is restrictive only if the user
+        # wants to define a custom scale. Additionally, setting the scale after
+        # updating units breaks in some cases on older versions of matplotlib
+        # (/ older pandas?), so only do it if necessary.
+        axis_obj = getattr(ax, f"{axis}axis")
+        if axis_obj.get_scale() != scale.scale_obj.name:
+            ax.set(**{f"{axis}scale": scale.scale_obj.name})
+    else:
+        ax.set(**{f"{axis}scale": scale.scale_obj})

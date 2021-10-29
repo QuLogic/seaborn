@@ -4,13 +4,12 @@ import re
 import io
 import itertools
 from copy import deepcopy
-from distutils.version import LooseVersion
 
 import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt  # TODO defer import into Plot.show()
 
-from seaborn._compat import scale_factory
+from seaborn._compat import scale_factory, set_scale_obj
 from seaborn._core.rules import categorical_order
 from seaborn._core.data import PlotData
 from seaborn._core.subplots import Subplots
@@ -374,7 +373,7 @@ class Plot:
     # TODO originally we had planned to have a scale_native option that would default
     # to matplotlib. I don't fully remember why. Is this still something we need?
 
-    def scale_numeric(
+    def scale_numeric(  # TODO FIXME:names just scale()?
         self,
         var: str,
         scale: str | ScaleBase = "linear",
@@ -418,10 +417,11 @@ class Plot:
 
         return self
 
-    def scale_categorical(
+    def scale_categorical(  # TODO FIXME:names scale_cat()?
         self,
         var: str,
         order: Series | Index | Iterable | None = None,
+        # TODO parameter for binning continuous variable?
         formatter: Callable[[Any], str] = format,
     ) -> Plot:
 
@@ -582,21 +582,6 @@ class Plot:
         # TODO currently typoing variable name in `scale_*`, or scaling a variable that
         # isn't defined anywhere, silently does nothing. We should raise/warn on that.
 
-        def set_scale_obj(ax, axis, scale):
-            """Handle backwards compatability with setting matplotlib scale."""
-            if LooseVersion(mpl.__version__) < "3.4":
-                # The ability to pass a BaseScale instance to Axes.set_{}scale was added
-                # to matplotlib in version 3.4.0: GH: matplotlib/matplotlib/pull/19089
-                # Workaround: use the scale name, which is restrictive only if the user
-                # wants to define a custom scale. Additionally, setting the scale after
-                # updating units breaks in some cases on older versions of matplotlib
-                # (/ older pandas?), so only do it if necessary.
-                axis_obj = getattr(ax, f"{axis}axis")
-                if axis_obj.get_scale() != scale.scale_obj.name:
-                    ax.set(**{f"{axis}scale": scale.scale_obj.name})
-            else:
-                ax.set(**{f"{axis}scale": scale.scale_obj})
-
         df = self._data.frame
         variables = set(df)
         for layer in self._layers:
@@ -638,7 +623,7 @@ class Plot:
 
             for subplot in self._subplots:
 
-                if subplot[axis] != var:  # FIXME is this wrong?
+                if subplot[axis] != var:
                     continue
 
                 axis_obj = getattr(subplot["ax"], f"{axis}axis")
@@ -670,14 +655,11 @@ class Plot:
                 axis_cache[axis_obj] = axis_scale
 
         for subplot in self._subplots:
-            subplot.setdefault("xscale", NumericScale(mpl.scale.LinearScale("x"), None))
-            subplot.setdefault("yscale", NumericScale(mpl.scale.LinearScale("y"), None))
-
-        # TODO Think about how this is going to handle situations where we have
-        # e.g. ymin and ymax but no y specified. I think in that situation one
-        # would expect to control the y scale with scale_numeric("y").
-        # Actually, if one calls that explicitly, it works. But if they don't,
-        # then no scale gets created for y.
+            ax = subplot["ax"]
+            for axis in "xy":
+                # TODO should we also infer categories / datetime units?
+                default_scale = scale_factory(getattr(ax, f"get_{axis}scale")(), axis)
+                subplot.setdefault(f"{axis}scale", NumericScale(default_scale, None))
 
     def _setup_mappings(self) -> None:
 
