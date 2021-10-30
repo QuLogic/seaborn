@@ -35,7 +35,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Generator, Iterable, Hashable
     from pandas import DataFrame, Series, Index
     from matplotlib.axes import Axes
-    from matplotlib.axis import Axis
     from matplotlib.color import Normalize
     from matplotlib.figure import Figure, SubFigure
     from matplotlib.scale import ScaleBase
@@ -579,16 +578,11 @@ class Plot:
 
     def _setup_scales(self) -> None:
 
-        # TODO currently typoing variable name in `scale_*`, or scaling a variable that
-        # isn't defined anywhere, silently does nothing. We should raise/warn on that.
-        # Related: it might also make sense to allow scaling of x/y when neither are
-        # defined, since x/y axes *do* exist. Currently this neither works nor raises.
-
-        # Determine all of the variables that will be used at some point in the plot
+        # Identify all of the variables that will be used at some point in the plot
         df = self._data.frame
-        variables = set(df)
+        variables = list(df)
         for layer in self._layers:
-            variables |= set(layer.data.frame)
+            variables.extend(c for c in layer.data.frame if c not in variables)
 
         # Catch cases where a variable is explicitly scaled but has no data,
         # which is *likely* to be a user error (i.e. a typo or mis-specified plot).
@@ -599,8 +593,6 @@ class Plot:
         if undefined:
             err = f"No data found for variable(s) with explicit scale: {undefined}"
             raise RuntimeError(err)  # FIXME:PlotSpecError
-
-        axis_cache: dict[Axis, Scale] = {}
 
         for var in variables:
 
@@ -636,11 +628,11 @@ class Plot:
 
             # The mappings are always shared across subplots, but the coordinate
             # scaling can be independent (i.e. with share{x/y} = False).
-            # So the coordinate scale setup is more complicated.
+            # So the coordinate scale setup is more complicated, and the rest of the
+            # code is only used for coordinate scales.
             if axis is None:
                 continue
 
-            facet_dim = {"x": "col", "y": "row"}[axis]
             share_state = self._subplots.subplot_spec[f"share{axis}"]
 
             # Loop over every subplot and assign its scale if it's not in the axis cache
@@ -651,16 +643,6 @@ class Plot:
                     continue
 
                 axis_obj = getattr(subplot["ax"], f"{axis}axis")
-
-                # With axis sharing enabled, the same object is used in every subplot.
-                # We only want to modify its scale once (doing so resets formatters).
-                # But we still need to track each subplot's scale in the subplot dict
-                # which is used to scale/unscale data before/after stat transform.
-                if axis_obj in axis_cache:
-                    axis_scale = axis_cache[axis_obj]
-                    subplot[f"{axis}scale"] = axis_scale
-                    continue
-
                 set_scale_obj(subplot["ax"], axis, scale)
 
                 # Even though this is down here, it only gets called once, because
@@ -675,8 +657,8 @@ class Plot:
                     if share_state in [False, "none"]:
                         subplot_data = self._filter_subplot_data(df, subplot)
                     # Sharing within row/col is more complicated
-                    elif share_state == facet_dim and facet_dim in df:
-                        subplot_data = df[df[facet_dim] == subplot[facet_dim]]
+                    elif share_state in df:
+                        subplot_data = df[df[share_state] == subplot[share_state]]
                     else:
                         subplot_data = df
 
@@ -684,9 +666,6 @@ class Plot:
                     subplot_values = var_data.loc[subplot_data.index].stack()
                     axis_scale = scale.setup(subplot_values, axis_obj)
                     subplot[f"{axis}scale"] = axis_scale
-
-                # Cache the axis object so we only modify it once
-                axis_cache[axis_obj] = axis_scale
 
         # Set default axis scales for when they're not defined at this point
         for subplot in self._subplots:

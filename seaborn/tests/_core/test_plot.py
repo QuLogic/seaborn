@@ -363,6 +363,54 @@ class TestAxisScaling:
         assert_vector_equal(m.passed_data[0]["x"], pd.Series([0., 1.], [0, 1]))
         assert_vector_equal(m.passed_data[1]["x"], pd.Series([0., 1.], [2, 3]))
 
+    def test_facet_categories_single_dim_shared(self):
+
+        data = [
+            ("a", 1, 1), ("b", 1, 1),
+            ("a", 1, 2), ("c", 1, 2),
+            ("b", 2, 1), ("d", 2, 1),
+            ("e", 2, 2), ("e", 2, 1),
+        ]
+        df = pd.DataFrame(data, columns=["x", "row", "col"]).assign(y=1)
+        variables = {k: k for k in df}
+
+        m = MockMark()
+        p = Plot(df, **variables).add(m).configure(sharex="row").plot()
+
+        axs = p._figure.axes
+        for ax in axs:
+            assert ax.get_xticks() == [0, 1, 2]
+
+        assert_vector_equal(m.passed_data[0]["x"], pd.Series([0., 1.], [0, 1]))
+        assert_vector_equal(m.passed_data[1]["x"], pd.Series([0., 2.], [2, 3]))
+        assert_vector_equal(m.passed_data[2]["x"], pd.Series([0., 1., 2.], [4, 5, 7]))
+        assert_vector_equal(m.passed_data[3]["x"], pd.Series([2.], [6]))
+
+    def test_pair_categories(self):
+
+        data = [("a", "a"), ("b", "c")]
+        df = pd.DataFrame(data, columns=["x1", "x2"]).assign(y=1)
+        m = MockMark()
+        p = Plot(df, y="y").pair(x=["x1", "x2"]).add(m).plot()
+
+        ax1, ax2 = p._figure.axes
+        assert ax1.get_xticks() == [0, 1]
+        assert ax2.get_xticks() == [0, 1]
+        assert_vector_equal(m.passed_data[0]["x"], pd.Series([0., 1.], [0, 1]))
+        assert_vector_equal(m.passed_data[1]["x"], pd.Series([0., 1.], [0, 1]))
+
+    def test_pair_categories_shared(self):
+
+        data = [("a", "a"), ("b", "c")]
+        df = pd.DataFrame(data, columns=["x1", "x2"]).assign(y=1)
+        m = MockMark()
+        p = Plot(df, y="y").pair(x=["x1", "x2"]).add(m).configure(sharex=True).plot()
+
+        for ax in p._figure.axes:
+            assert ax.get_xticks() == [0, 1, 2]
+        assert_vector_equal(m.passed_data[0]["x"], pd.Series([0., 1.], [0, 1]))
+        assert_vector_equal(m.passed_data[1]["x"], pd.Series([0., 2.], [0, 1]))
+
     def test_undefined_variable_raises(self):
 
         p = Plot(x=[1, 2, 3], color=["a", "b", "c"]).scale_numeric("y")
