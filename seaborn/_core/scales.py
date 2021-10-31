@@ -21,6 +21,7 @@ class Scale:
 
     axis: DummyAxis
     scale_obj: ScaleBase
+    scale_type: VarType
 
     def __init__(
         self,
