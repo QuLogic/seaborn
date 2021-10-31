@@ -922,7 +922,7 @@ class Plot:
         self,
         df: DataFrame
     ) -> Generator[
-        tuple[list[dict], DataFrame], None, None
+        tuple[list[dict], DataFrame, dict[str, Scale]], None, None
     ]:
         # TODO retype return with SubplotSpec or similar
         # TODO also maybe abstract the whole thing somewhere, it's way too verbose
@@ -932,7 +932,7 @@ class Plot:
         if not pair_variables:
             # TODO casting to list because subplots below is a list
             # Maybe a cleaner way to do this?
-            yield list(self._subplots), df
+            yield list(self._subplots), df, self._scales
             return
 
         iter_axes = itertools.product(*[
@@ -955,7 +955,9 @@ class Plot:
                         for col in df if col.startswith(prefix)
                     })
 
-            yield subplots, df.assign(**reassignments)
+            scales = {new: self._scales[old.name] for new, old in reassignments.items()}
+
+            yield subplots, df.assign(**reassignments), scales
 
     def _filter_subplot_data(
         self,

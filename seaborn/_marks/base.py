@@ -34,8 +34,8 @@ class Mark:
         # TODO The original version of this (in seaborn._oldcore) did more checking.
         # Paring that down here for the prototype to see what restrictions make sense.
 
-        x_type = None if "x" not in scales else scales["x"].type
-        y_type = None if "y" not in scales else scales["y"].type
+        x_type = None if "x" not in scales else scales["x"].scale_type
+        y_type = None if "y" not in scales else scales["y"].scale_type
 
         if x_type is None:
             return "y"
