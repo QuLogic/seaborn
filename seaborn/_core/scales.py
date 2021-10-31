@@ -8,6 +8,7 @@ from matplotlib.scale import LinearScale
 from matplotlib.colors import Normalize
 
 from seaborn._core.rules import VarType, variable_type, categorical_order
+from seaborn._compat import norm_from_scale
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -199,54 +200,6 @@ class DummyAxis:
         if self.converter is None:
             return x
         return self.converter.convert(x, self.units, self)
-
-
-def norm_from_scale(
-    scale: ScaleBase, norm: tuple[float | None, float | None] | None,
-) -> Normalize:
-
-    if isinstance(norm, Normalize):
-        return norm
-
-    if norm is None:
-        vmin = vmax = None
-    else:
-        vmin, vmax = norm  # TODO more helpful error if this fails?
-
-    class ScaledNorm(Normalize):
-
-        transform: Callable
-
-        def __call__(self, value, clip=None):
-            # From github.com/matplotlib/matplotlib/blob/v3.4.2/lib/matplotlib/colors.py
-            # See github.com/matplotlib/matplotlib/tree/v3.4.2/LICENSE
-            value, is_scalar = self.process_value(value)
-            self.autoscale_None(value)
-            if self.vmin > self.vmax:
-                raise ValueError("vmin must be less or equal to vmax")
-            if self.vmin == self.vmax:
-                return np.full_like(value, 0)
-            if clip is None:
-                clip = self.clip
-            if clip:
-                value = np.clip(value, self.vmin, self.vmax)
-            # Seaborn changes start
-            t_value = self.transform(value).reshape(np.shape(value))
-            t_vmin, t_vmax = self.transform([self.vmin, self.vmax])
-            # Seaborn changes end
-            if not np.isfinite([t_vmin, t_vmax]).all():
-                raise ValueError("Invalid vmin or vmax")
-            t_value -= t_vmin
-            t_value /= (t_vmax - t_vmin)
-            t_value = np.ma.masked_invalid(t_value, copy=False)
-            return t_value[0] if is_scalar else t_value
-
-    new_norm = ScaledNorm(vmin, vmax)
-
-    # TODO do this, or build the norm into the ScaleWrapper.foraward interface?
-    new_norm.transform = scale.get_transform().transform  # type: ignore  # mypy #2427
-
-    return new_norm
 
 
 def get_default_scale(data: Series):

@@ -10,7 +10,7 @@ import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt  # TODO defer import into Plot.show()
 
-from seaborn._compat import scale_factory, set_scale_obj
+from seaborn._compat import norm_from_scale, scale_factory, set_scale_obj
 from seaborn._core.rules import categorical_order
 from seaborn._core.data import PlotData
 from seaborn._core.subplots import Subplots
@@ -26,7 +26,6 @@ from seaborn._core.scales import (
     NumericScale,
     CategoricalScale,
     DateTimeScale,
-    norm_from_scale,
     get_default_scale,
 )
 
