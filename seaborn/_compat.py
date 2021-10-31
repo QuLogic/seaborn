@@ -39,11 +39,7 @@ def set_scale_obj(ax, axis, scale):
         # The ability to pass a BaseScale instance to Axes.set_{}scale was added
         # to matplotlib in version 3.4.0: GH: matplotlib/matplotlib/pull/19089
         # Workaround: use the scale name, which is restrictive only if the user
-        # wants to define a custom scale. Additionally, setting the scale after
-        # updating units breaks in some cases on older versions of matplotlib
-        # (/ older pandas?), so only do it if necessary.
-        axis_obj = getattr(ax, f"{axis}axis")
-        if axis_obj.get_scale() != scale.scale_obj.name:
-            ax.set(**{f"{axis}scale": scale.scale_obj.name})
+        # wants to define a custom scale; they'll need to update the registry too.
+        ax.set(**{f"{axis}scale": scale.scale_obj.name})
     else:
         ax.set(**{f"{axis}scale": scale.scale_obj})

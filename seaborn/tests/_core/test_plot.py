@@ -399,6 +399,10 @@ class TestAxisScaling:
         assert_vector_equal(m.passed_data[0]["x"], pd.Series([0., 1.], [0, 1]))
         assert_vector_equal(m.passed_data[1]["x"], pd.Series([0., 1.], [0, 1]))
 
+    @pytest.mark.xfail(
+        LooseVersion(mpl.__version__) < "3.4.0",
+        reason="Sharing paired categorical axes requires matplotlib>3.4.0"
+    )
     def test_pair_categories_shared(self):
 
         data = [("a", "a"), ("b", "c")]

@@ -4,6 +4,7 @@ import re
 import io
 import itertools
 from copy import deepcopy
+from distutils.version import LooseVersion
 
 import pandas as pd
 import matplotlib as mpl
@@ -635,6 +636,20 @@ class Plot:
 
             share_state = self._subplots.subplot_spec[f"share{axis}"]
 
+            # Shared categorical axes are broken on matplotlib<3.4.0.
+            # https://github.com/matplotlib/matplotlib/pull/18308
+            # This only affects us when sharing *paired* axes.
+            # While it would be possible to hack a workaround together,
+            # this is a novel/niche behavior, so we will just raise.
+            if LooseVersion(mpl.__version__) < "3.4.0":
+                paired_axis = axis in self._pairspec
+                cat_scale = self._scales[var].scale_type == "categorical"
+                ok_dim = {"x": "col", "y": "row"}[axis]
+                shared_axes = share_state not in [False, "none", ok_dim]
+                if paired_axis and cat_scale and shared_axes:
+                    err = "Sharing paired categorical axes requires matplotlib>=3.4.0"
+                    raise RuntimeError(err)
+
             # Loop over every subplot and assign its scale if it's not in the axis cache
             for subplot in self._subplots:
 
@@ -645,8 +660,9 @@ class Plot:
                 axis_obj = getattr(subplot["ax"], f"{axis}axis")
                 set_scale_obj(subplot["ax"], axis, scale)
 
-                # Even though this is down here, it only gets called once, because
-                # the axis object gets cached and used in the rest of the loop.
+                # Now we need to identify the right data rows to setup the scale with
+
+                # The all-shared case is easiest, every subplot sees all the data
                 if share_state in [True, "all"]:
                     axis_scale = scale.setup(var_values, axis_obj)
                     subplot[f"{axis}scale"] = axis_scale
