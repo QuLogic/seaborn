@@ -500,14 +500,6 @@ class Plot:
 
         return self
 
-    def resize(self, val):
-
-        # TODO I don't think this is the interface we ultimately want to use, but
-        # I want to be able to do this for demonstration now. If we do want this
-        # could think about how to have "auto" sizing based on number of subplots
-        self._figsize = val
-        return self
-
     def plot(self, pyplot=False) -> Plotter:
 
         plotter = Plotter(pyplot=pyplot)
@@ -549,8 +541,11 @@ class Plot:
             self.plot(pyplot=True)
         plt.show(**kwargs)
 
-    def save(self) -> Plot:  # TODO perhaps this should not return self?
+    def save(self) -> Plot:
 
+        # TODO ?
+        # self.plot().save()
+        # return self
         raise NotImplementedError()
         return self
 
