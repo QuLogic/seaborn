@@ -587,7 +587,6 @@ class Plotter:
         )
 
         # TODO concat with mapping spec
-
         self._layers = []
         for layer in p._layers:
             self._layers.append({
@@ -621,7 +620,8 @@ class Plotter:
             var_data = pd.concat([
                 df.get(var),
                 # Only use variables that are *added* at the layer-level
-                *(y["data"].frame.get(var) for y in self._layers if var in y["variables"])
+                *(x["data"].frame.get(var)
+                  for x in self._layers if var in x["variables"])
             ], axis=1)
 
             # Determine whether this is an coordinate variable
@@ -727,9 +727,9 @@ class Plotter:
 
             all_values = pd.concat([
                 self._data.frame.get(var),
-                # TODO important to check for var in x.variables, not just in x
-                # Because we only want to concat if a variable was *added* here
-                *(x["data"].frame.get(var) for x in self._layers if var in x["variables"])
+                # Only use variables that are *added* at the layer-level
+                *(x["data"].frame.get(var)
+                  for x in self._layers if var in x["variables"])
             ], axis=1).stack()
 
             if var in self._scales:
