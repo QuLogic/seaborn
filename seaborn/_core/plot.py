@@ -152,7 +152,7 @@ class Plot:
             "stat": stat,
             "source": data,
             "variables": variables,
-            "orient": {"v": "x", "h": "y"}.get(orient, orient),
+            "orient": {"v": "x", "h": "y"}.get(orient, orient),  # type: ignore
         })
 
         return self
@@ -566,6 +566,8 @@ class Plot:
 
 class Plotter:
 
+    _pairspec: dict[str, Any]  # TODO try to avoid needing this
+
     def __init__(self, pyplot=False):
 
         self.pyplot = pyplot
@@ -812,7 +814,11 @@ class Plotter:
                 title_text = ax.set_title(title)
                 title_text.set_visible(show_title)
 
-    def _plot_layer(self, layer: Layer, mappings: dict[str, SemanticMapping]) -> None:
+    def _plot_layer(
+        self,
+        layer: dict[str, Any],  # TODO Type
+        mappings: dict[str, SemanticMapping]
+    ) -> None:
 
         default_grouping_vars = ["col", "row", "group"]  # TODO where best to define?
 
@@ -1064,28 +1070,3 @@ class Plotter:
         # to using constrained/tight layout.
         self._figure.savefig(buffer, format="png", bbox_inches="tight")
         return buffer.getvalue()
-
-
-class Layer:  # TODO simplify into a dictionary?
-
-    data: PlotData
-
-    def __init__(
-        self,
-        mark: Mark,
-        stat: Stat | None,
-        orient: Literal["x", "y"] | None,
-        source: DataSource | None,
-        variables: dict[str, VariableSpec],
-    ):
-
-        self.mark = mark
-        self.stat = stat
-        self.orient = orient
-        self.source = source
-        self.variables = variables
-
-    def __contains__(self, key: str) -> bool:
-        if hasattr(self, "data"):
-            return key in self.data
-        return False
