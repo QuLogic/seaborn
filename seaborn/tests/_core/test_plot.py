@@ -121,34 +121,31 @@ class TestLayerAddition:
 
         p = Plot(long_df, x="x", y="y").add(MockMark()).plot()
         layer, = p._layers
-        assert_frame_equal(p._data.frame, layer.data.frame)
+        assert_frame_equal(p._data.frame, layer["data"].frame)
 
     def test_with_new_variable_by_name(self, long_df):
 
         p = Plot(long_df, x="x").add(MockMark(), y="y").plot()
         layer, = p._layers
-        assert layer.data.frame.columns.to_list() == ["x", "y"]
+        assert layer["data"].frame.columns.to_list() == ["x", "y"]
         for var in "xy":
-            assert var in layer
-            assert_vector_equal(layer.data.frame[var], long_df[var])
+            assert_vector_equal(layer["data"].frame[var], long_df[var])
 
     def test_with_new_variable_by_vector(self, long_df):
 
         p = Plot(long_df, x="x").add(MockMark(), y=long_df["y"]).plot()
         layer, = p._layers
-        assert layer.data.frame.columns.to_list() == ["x", "y"]
+        assert layer["data"].frame.columns.to_list() == ["x", "y"]
         for var in "xy":
-            assert var in layer
-            assert_vector_equal(layer.data.frame[var], long_df[var])
+            assert_vector_equal(layer["data"].frame[var], long_df[var])
 
     def test_with_late_data_definition(self, long_df):
 
         p = Plot().add(MockMark(), data=long_df, x="x", y="y").plot()
         layer, = p._layers
-        assert layer.data.frame.columns.to_list() == ["x", "y"]
+        assert layer["data"].frame.columns.to_list() == ["x", "y"]
         for var in "xy":
-            assert var in layer
-            assert_vector_equal(layer.data.frame[var], long_df[var])
+            assert_vector_equal(layer["data"].frame[var], long_df[var])
 
     def test_with_new_data_definition(self, long_df):
 
@@ -156,20 +153,18 @@ class TestLayerAddition:
 
         p = Plot(long_df, x="x", y="y").add(MockMark(), data=long_df_sub).plot()
         layer, = p._layers
-        assert layer.data.frame.columns.to_list() == ["x", "y"]
+        assert layer["data"].frame.columns.to_list() == ["x", "y"]
         for var in "xy":
-            assert var in layer
             assert_vector_equal(
-                layer.data.frame[var], long_df_sub[var].reindex(long_df.index)
+                layer["data"].frame[var], long_df_sub[var].reindex(long_df.index)
             )
 
     def test_drop_variable(self, long_df):
 
         p = Plot(long_df, x="x", y="y").add(MockMark(), y=None).plot()
         layer, = p._layers
-        assert layer.data.frame.columns.to_list() == ["x"]
-        assert "y" not in layer
-        assert_vector_equal(layer.data.frame["x"], long_df["x"])
+        assert layer["data"].frame.columns.to_list() == ["x"]
+        assert_vector_equal(layer["data"].frame["x"], long_df["x"])
 
     def test_stat_default(self):
 
@@ -178,7 +173,7 @@ class TestLayerAddition:
 
         p = Plot().add(MarkWithDefaultStat())
         layer, = p._layers
-        assert layer.stat.__class__ is MockStat
+        assert layer["stat"].__class__ is MockStat
 
     def test_stat_nondefault(self):
 
@@ -190,7 +185,7 @@ class TestLayerAddition:
 
         p = Plot().add(MarkWithDefaultStat(), OtherMockStat())
         layer, = p._layers
-        assert layer.stat.__class__ is OtherMockStat
+        assert layer["stat"].__class__ is OtherMockStat
 
     @pytest.mark.parametrize(
         "arg,expected",
@@ -427,8 +422,7 @@ class TestPlotting:
 
     def test_matplotlib_object_creation(self):
 
-        p = Plot()
-        p._setup_figure()
+        p = Plot().plot()
         assert isinstance(p._figure, mpl.figure.Figure)
         for sub in p._subplots:
             assert isinstance(sub["ax"], mpl.axes.Axes)
@@ -671,19 +665,13 @@ class TestPlotting:
         p2.add(MockMark())
         assert not p1._layers
 
-    def test_clone_raises_when_inappropriate(self, long_df):
+    def test_clone_raises_with_target(self, long_df):
 
-        p1 = Plot(long_df, x="x", y="y").plot()
-        with pytest.raises(
-            RuntimeError, match="Cannot clone after calling `Plot.plot`."
-        ):
-            p1.clone()
-
-        p2 = Plot(long_df, x="x", y="y").on(mpl.figure.Figure())
+        p = Plot(long_df, x="x", y="y").on(mpl.figure.Figure())
         with pytest.raises(
             RuntimeError, match="Cannot clone after calling `Plot.on`."
         ):
-            p2.clone()
+            p.clone()
 
     def test_default_is_no_pyplot(self):
 
