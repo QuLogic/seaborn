@@ -66,15 +66,12 @@ class Plot:
     _data: PlotData
     _layers: list[dict]
     _semantics: dict[str, Semantic]
-    _mappings: dict[str, SemanticMapping]  # TODO keys as Literal, or use TypedDict?
     _scales: dict[str, Scale]
 
     # TODO use TypedDict here
     _subplotspec: dict[str, Any]
     _facetspec: dict[str, Any]
     _pairspec: dict[str, Any]
-
-    _figure: Figure
 
     def __init__(
         self,
@@ -93,6 +90,12 @@ class Plot:
         self._pairspec = {}
 
         self._target = None
+
+    def _repr_png_(self) -> bytes:
+
+        return self.plot()._repr_png_()
+
+    # TODO _repr_svg_?
 
     def on(self, target: Axes | SubFigure | Figure) -> Plot:
 
@@ -370,6 +373,8 @@ class Plot:
     # This could be used to add another color-like dimension
     # and also the basis for what mappings like stat.density -> rgba do
 
+    # TODO map_saturation/map_chroma as a binary semantic?
+
     # TODO originally we had planned to have a scale_native option that would default
     # to matplotlib. I don't fully remember why. Is this still something we need?
 
@@ -500,6 +505,19 @@ class Plot:
 
         return self
 
+    def clone(self) -> Plot:
+
+        if self._target is not None:
+            # TODO think about whether this restriction is needed with immutable Plot
+            raise RuntimeError("Cannot clone after calling `Plot.on`.")
+        # TODO we are moving towards non-mutatable Plot so we don't need deep copy here
+        return deepcopy(self)
+
+    def save(self, fname, **kwargs) -> Plot:
+        # TODO kws?
+        self.plot().save(fname, **kwargs)
+        return self
+
     def plot(self, pyplot=False) -> Plotter:
 
         plotter = Plotter(pyplot=pyplot)
@@ -528,14 +546,6 @@ class Plot:
 
         return plotter
 
-    def clone(self) -> Plot:
-
-        if self._target is not None:
-            # TODO think about whether this restriction is needed with immutable Plot
-            raise RuntimeError("Cannot clone after calling `Plot.on`.")
-        # TODO we are moving towards non-mutatable Plot so we don't need deep copy here
-        return deepcopy(self)
-
     def show(self, **kwargs) -> None:
 
         # Keep an eye on whether matplotlib implements "attaching" an existing
@@ -546,23 +556,6 @@ class Plot:
             self.plot(pyplot=True)
         plt.show(**kwargs)
 
-    def save(self) -> Plot:
-
-        # TODO ?
-        # self.plot().save()
-        # return self
-        raise NotImplementedError()
-        return self
-
-    def _repr_png_(self) -> bytes:
-
-        # TODO clone should not be necessary FIXME:mutability
-        if self._target is None:
-            plotter = self.clone().plot()
-        else:
-            plotter = self.plot()
-        return plotter._repr_png_()
-
 
 class Plotter:
 
@@ -572,7 +565,40 @@ class Plotter:
 
         self.pyplot = pyplot
 
-    def _setup_data(self, p: Plot):
+    def save(self, fname, **kwargs) -> Plotter:
+        # TODO type fname as string or path; handle Path objects if matplotlib can't
+        self._figure.savefig(fname, **kwargs)
+        return self
+
+    def show(self, **kwargs) -> None:
+        # TODO if we did not create the Plotter with pyplot, is it possible to do this?
+        # If not we should clearly raise.
+        plt.show(**kwargs)
+
+    def _repr_png_(self) -> bytes:
+
+        # TODO better to do this through a Jupyter hook? e.g.
+        # ipy = IPython.core.formatters.get_ipython()
+        # fmt = ipy.display_formatter.formatters["text/html"]
+        # fmt.for_type(Plot, ...)
+
+        # TODO use matplotlib backend directly instead of going through savefig?
+
+        # TODO Would like to allow for svg too ... how to configure?
+
+        # TODO perhaps have self.show() flip a switch to disable this, so that
+        # user does not end up with two versions of the figure in the output
+
+        # TODO detect HiDPI and generate a retina png by default?
+        buffer = io.BytesIO()
+        # TODO use bbox_inches="tight" like the inline backend?
+        # pro: better results,  con: (sometimes) confusing results
+        # Better solution would be to default (with option to change)
+        # to using constrained/tight layout.
+        self._figure.savefig(buffer, format="png", bbox_inches="tight")
+        return buffer.getvalue()
+
+    def _setup_data(self, p: Plot) -> None:
 
         self._data = (
             p._data
@@ -593,6 +619,79 @@ class Plotter:
                 "data": self._data.concat(layer.get("source"), layer.get("variables")),
                 **layer,
             })
+
+    def _setup_figure(self, p: Plot) -> None:
+
+        # --- Parsing the faceting/pairing parameterization to specify figure grid
+
+        # TODO use context manager with theme that has been set
+        # TODO (maybe wrap THIS function with context manager; would be cleaner)
+
+        self._subplots = subplots = Subplots(
+            p._subplotspec, p._facetspec, p._pairspec, self._data,
+        )
+
+        # --- Figure initialization
+        figure_kws = {"figsize": getattr(p, "_figsize", None)}  # TODO fix
+        self._figure = subplots.init_figure(self.pyplot, figure_kws, p._target)
+
+        # --- Figure annotation
+        for sub in subplots:
+            ax = sub["ax"]
+            for axis in "xy":
+                axis_key = sub[axis]
+                # TODO Should we make it possible to use only one x/y label for
+                # all rows/columns in a faceted plot? Maybe using sub{axis}label,
+                # although the alignments of the labels from that method leaves
+                # something to be desired (in terms of how it defines 'centered').
+                names = [
+                    self._data.names.get(axis_key),
+                    *[layer["data"].names.get(axis_key) for layer in self._layers],
+                ]
+                label = next((name for name in names if name is not None), None)
+                ax.set(**{f"{axis}label": label})
+
+                axis_obj = getattr(ax, f"{axis}axis")
+                visible_side = {"x": "bottom", "y": "left"}.get(axis)
+                show_axis_label = (
+                    sub[visible_side]
+                    or axis in p._pairspec and bool(p._pairspec.get("wrap"))
+                    or not p._pairspec.get("cartesian", True)
+                )
+                axis_obj.get_label().set_visible(show_axis_label)
+                show_tick_labels = (
+                    show_axis_label
+                    or p._subplotspec.get(f"share{axis}") not in (
+                        True, "all", {"x": "col", "y": "row"}[axis]
+                    )
+                )
+                plt.setp(axis_obj.get_majorticklabels(), visible=show_tick_labels)
+                plt.setp(axis_obj.get_minorticklabels(), visible=show_tick_labels)
+
+            # TODO title template should be configurable
+            # TODO Also we want right-side titles for row facets in most cases
+            # TODO should configure() accept a title= kwarg (for single subplot plots)?
+            # Let's have what we currently call "margin titles" but properly using the
+            # ax.set_title interface (see my gist)
+            title_parts = []
+            for dim in ["row", "col"]:
+                if sub[dim] is not None:
+                    name = self._data.names.get(dim, f"_{dim}_")
+                    title_parts.append(f"{name} = {sub[dim]}")
+
+            has_col = sub["col"] is not None
+            has_row = sub["row"] is not None
+            show_title = (
+                has_col and has_row
+                or (has_col or has_row) and p._facetspec.get("wrap")
+                or (has_col and sub["top"])
+                # TODO or has_row and sub["right"] and <right titles>
+                or has_row  # TODO and not <right titles>
+            )
+            if title_parts:
+                title = " | ".join(title_parts)
+                title_text = ax.set_title(title)
+                title_text.set_visible(show_title)
 
     def _setup_scales(self, p: Plot) -> None:
 
@@ -740,79 +839,6 @@ class Plotter:
                 scale.type_declared = False
 
             self._mappings[var] = semantic.setup(all_values, scale.setup(all_values))
-
-    def _setup_figure(self, p: Plot) -> None:
-
-        # --- Parsing the faceting/pairing parameterization to specify figure grid
-
-        # TODO use context manager with theme that has been set
-        # TODO (maybe wrap THIS function with context manager; would be cleaner)
-
-        self._subplots = subplots = Subplots(
-            p._subplotspec, p._facetspec, p._pairspec, self._data,
-        )
-
-        # --- Figure initialization
-        figure_kws = {"figsize": getattr(p, "_figsize", None)}  # TODO fix
-        self._figure = subplots.init_figure(self.pyplot, figure_kws, p._target)
-
-        # --- Figure annotation
-        for sub in subplots:
-            ax = sub["ax"]
-            for axis in "xy":
-                axis_key = sub[axis]
-                # TODO Should we make it possible to use only one x/y label for
-                # all rows/columns in a faceted plot? Maybe using sub{axis}label,
-                # although the alignments of the labels from that method leaves
-                # something to be desired (in terms of how it defines 'centered').
-                names = [
-                    self._data.names.get(axis_key),
-                    *[layer["data"].names.get(axis_key) for layer in self._layers],
-                ]
-                label = next((name for name in names if name is not None), None)
-                ax.set(**{f"{axis}label": label})
-
-                axis_obj = getattr(ax, f"{axis}axis")
-                visible_side = {"x": "bottom", "y": "left"}.get(axis)
-                show_axis_label = (
-                    sub[visible_side]
-                    or axis in p._pairspec and bool(p._pairspec.get("wrap"))
-                    or not p._pairspec.get("cartesian", True)
-                )
-                axis_obj.get_label().set_visible(show_axis_label)
-                show_tick_labels = (
-                    show_axis_label
-                    or p._subplotspec.get(f"share{axis}") not in (
-                        True, "all", {"x": "col", "y": "row"}[axis]
-                    )
-                )
-                plt.setp(axis_obj.get_majorticklabels(), visible=show_tick_labels)
-                plt.setp(axis_obj.get_minorticklabels(), visible=show_tick_labels)
-
-            # TODO title template should be configurable
-            # TODO Also we want right-side titles for row facets in most cases
-            # TODO should configure() accept a title= kwarg (for single subplot plots)?
-            # Let's have what we currently call "margin titles" but properly using the
-            # ax.set_title interface (see my gist)
-            title_parts = []
-            for dim in ["row", "col"]:
-                if sub[dim] is not None:
-                    name = self._data.names.get(dim, f"_{dim}_")
-                    title_parts.append(f"{name} = {sub[dim]}")
-
-            has_col = sub["col"] is not None
-            has_row = sub["row"] is not None
-            show_title = (
-                has_col and has_row
-                or (has_col or has_row) and p._facetspec.get("wrap")
-                or (has_col and sub["top"])
-                # TODO or has_row and sub["right"] and <right titles>
-                or has_row  # TODO and not <right titles>
-            )
-            if title_parts:
-                title = " | ".join(title_parts)
-                title_text = ax.set_title(title)
-                title_text.set_visible(show_title)
 
     def _plot_layer(
         self,
@@ -1048,24 +1074,3 @@ class Plotter:
                     yield sub_vars, df_subset.copy(), subplot["ax"]
 
         return split_generator
-
-    def _repr_png_(self) -> bytes:
-
-        # TODO better to do this through a Jupyter hook? e.g.
-        # ipy = IPython.core.formatters.get_ipython()
-        # fmt = ipy.display_formatter.formatters["text/html"]
-        # fmt.for_type(Plot, ...)
-
-        # TODO Would like to allow for svg too ... how to configure?
-
-        # TODO perhaps have self.show() flip a switch to disable this, so that
-        # user does not end up with two versions of the figure in the output
-
-        # TODO detect HiDPI and generate a retina png by default?
-        buffer = io.BytesIO()
-        # TODO use bbox_inches="tight" like the inline backend?
-        # pro: better results,  con: (sometimes) confusing results
-        # Better solution would be to default (with option to change)
-        # to using constrained/tight layout.
-        self._figure.savefig(buffer, format="png", bbox_inches="tight")
-        return buffer.getvalue()
