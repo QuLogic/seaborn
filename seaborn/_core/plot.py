@@ -249,6 +249,9 @@ class Plot:
         data: DataSource = None,
     ) -> Plot:
 
+        # TODO remove data= from this API. There is good reason to pass layer-specific
+        # data, but no reason to use separate global data sources.
+
         # Can't pass `None` here or it will disinherit the `Plot()` def
         variables = {}
         if col is not None:
@@ -530,13 +533,7 @@ class Plot:
         plotter._setup_mappings(self)
 
         for layer in plotter._layers:
-            # TODO worth thinking about whether we need these layer-specific mappings
-            # The rule should be that the same mapping is used for all layers, so all
-            # we should need to do is the `k in layer["data"]` check downstream?
-            layer_mappings = {
-                k: v for k, v in plotter._mappings.items() if k in layer["data"]
-            }
-            plotter._plot_layer(self, layer, layer_mappings)
+            plotter._plot_layer(self, layer, plotter._mappings)
 
         # TODO this should be configurable
         if not plotter._figure.get_constrained_layout():
@@ -570,6 +567,11 @@ class Plotter:
         # TODO if we did not create the Plotter with pyplot, is it possible to do this?
         # If not we should clearly raise.
         plt.show(**kwargs)
+
+    # TODO API for accessing the underlying matplotlib objects
+    # TODO what else is useful in the public API for this class?
+
+    # def draw?
 
     def _repr_png_(self) -> bytes:
 
