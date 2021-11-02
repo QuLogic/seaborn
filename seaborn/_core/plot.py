@@ -844,11 +844,11 @@ class Plotter:
             df = self._unscale_coords(subplots, df)
 
             grouping_vars = mark.grouping_vars + default_grouping_vars
-            generate_splits = self._setup_split_generator(
+            split_generator = self._setup_split_generator(
                 grouping_vars, df, mappings, subplots
             )
 
-            mark._plot(generate_splits, mappings, orient)
+            mark._plot(split_generator, mappings, orient)
 
     def _apply_stat(
         self,
@@ -1007,7 +1007,7 @@ class Plotter:
                 order = categorical_order(df[var])
             grouping_keys.append(order)
 
-        def generate_splits() -> Generator:
+        def split_generator() -> Generator:
 
             for subplot in subplots:
 
@@ -1047,7 +1047,7 @@ class Plotter:
 
                     yield sub_vars, df_subset.copy(), subplot["ax"]
 
-        return generate_splits
+        return split_generator
 
     def _repr_png_(self) -> bytes:
 

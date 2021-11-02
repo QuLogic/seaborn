@@ -61,12 +61,12 @@ class Mark:
 
     def _plot(
         self,
-        generate_splits: Callable[[], Generator],
+        split_generator: Callable[[], Generator],
         mappings: MappingDict,
         orient: Literal["x", "y"],
     ) -> None:
         """Main interface for creating a plot."""
-        for keys, data, ax in generate_splits():
+        for keys, data, ax in split_generator():
             kws = self._kwargs.copy()
             self._plot_split(keys, data, ax, mappings, orient, kws)
 
