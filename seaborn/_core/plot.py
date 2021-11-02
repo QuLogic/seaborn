@@ -520,12 +520,10 @@ class Plot:
 
     def plot(self, pyplot=False) -> Plotter:
 
+        # TODO if we have _target object, pyplot should be determined by whether it
+        # is hooked into the pyplot state machine (how do we check?)
+
         plotter = Plotter(pyplot=pyplot)
-
-        # TODO decide best thing to do here
-        plotter._pairspec = self._pairspec.copy()
-        ...  # TODO other spec objects?
-
         plotter._setup_data(self)
         plotter._setup_figure(self)
         plotter._setup_scales(self)
@@ -538,7 +536,7 @@ class Plot:
             layer_mappings = {
                 k: v for k, v in plotter._mappings.items() if k in layer["data"]
             }
-            plotter._plot_layer(layer, layer_mappings)
+            plotter._plot_layer(self, layer, layer_mappings)
 
         # TODO this should be configurable
         if not plotter._figure.get_constrained_layout():
@@ -558,8 +556,6 @@ class Plot:
 
 
 class Plotter:
-
-    _pairspec: dict[str, Any]  # TODO try to avoid needing this
 
     def __init__(self, pyplot=False):
 
@@ -842,6 +838,7 @@ class Plotter:
 
     def _plot_layer(
         self,
+        p: Plot,
         layer: dict[str, Any],  # TODO Type
         mappings: dict[str, SemanticMapping]
     ) -> None:
@@ -852,8 +849,10 @@ class Plotter:
         mark = layer["mark"]
         stat = layer["stat"]
 
+        pair_variables = p._pairspec.get("structure", {})
+
         full_df = data.frame
-        for subplots, df, scales in self._generate_pairings(full_df):
+        for subplots, df, scales in self._generate_pairings(full_df, pair_variables):
 
             orient = layer["orient"] or mark._infer_orient(scales)
 
@@ -962,14 +961,12 @@ class Plotter:
 
     def _generate_pairings(
         self,
-        df: DataFrame
+        df: DataFrame,
+        pair_variables: dict,
     ) -> Generator[
         tuple[list[dict], DataFrame, dict[str, Scale]], None, None
     ]:
         # TODO retype return with SubplotSpec or similar
-        # TODO also maybe abstract the whole thing somewhere, it's way too verbose
-
-        pair_variables = self._pairspec.get("structure", {})
 
         if not pair_variables:
             # TODO casting to list because subplots below is a list
