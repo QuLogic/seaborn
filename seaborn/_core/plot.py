@@ -514,7 +514,12 @@ class Plot:
         plotter._setup_mappings(self)
 
         for layer in plotter._layers:
-            layer_mappings = {k: v for k, v in plotter._mappings.items() if k in layer}
+            # TODO worth thinking about whether we need these layer-specific mappings
+            # The rule should be that the same mapping is used for all layers, so all
+            # we should need to do is the `k in layer["data"]` check downstream?
+            layer_mappings = {
+                k: v for k, v in plotter._mappings.items() if k in layer["data"]
+            }
             plotter._plot_layer(layer, layer_mappings)
 
         # TODO this should be configurable
@@ -826,18 +831,13 @@ class Plotter:
 
             orient = layer["orient"] or mark._infer_orient(scales)
 
-            # TODO FIXME:mutability mutating the mark/stat here is wrong
-            mark.orient = orient  # type: ignore  # mypy false positive?
-            if stat is not None:  # FIXME:IdentityStat
-                stat.orient = orient  # type: ignore  # mypy false positive?
-
             df = self._scale_coords(subplots, df)
 
             if stat is not None:
                 grouping_vars = stat.grouping_vars + default_grouping_vars
-                df = self._apply_stat(df, grouping_vars, stat)
+                df = self._apply_stat(df, grouping_vars, stat, orient)
 
-            df = mark._adjust(df, mappings)
+            df = mark._adjust(df, mappings, orient)
 
             # Our statistics happen on the scale we want, but then matplotlib is going
             # to re-handle the scaling, so we need to invert before handing off
@@ -848,13 +848,17 @@ class Plotter:
                 grouping_vars, df, mappings, subplots
             )
 
-            mark._plot(generate_splits, mappings)
+            mark._plot(generate_splits, mappings, orient)
 
     def _apply_stat(
-        self, df: DataFrame, grouping_vars: list[str], stat: Stat
+        self,
+        df: DataFrame,
+        grouping_vars: list[str],
+        stat: Stat,
+        orient: Literal["x", "y"],
     ) -> DataFrame:
 
-        stat.setup(df)  # TODO pass scales here?
+        stat.setup(df, orient)  # TODO pass scales here?
 
         # TODO how can we special-case fast aggregations? (i.e. mean, std, etc.)
         # IDEA: have Stat identify as an aggregator? (Through Mixin or attribute)
@@ -862,8 +866,8 @@ class Plotter:
         stat_grouping_vars = [var for var in grouping_vars if var in df]
         # TODO I don't think we always want to group by the default orient axis?
         # Better to have the Stat declare when it wants that to happen
-        if stat.orient not in stat_grouping_vars:
-            stat_grouping_vars.append(stat.orient)
+        if orient not in stat_grouping_vars:
+            stat_grouping_vars.append(orient)
 
         # TODO rewrite this whole thing, I think we just need to avoid groupby/apply
         df = (
